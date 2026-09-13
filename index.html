@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Annoteur Plans PDF</title>
+  <style>
+    /* ===== RESET & BASE ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #1e1e2e;
+      --panel: #252535;
+      --panel2: #2e2e42;
+      --border: #3a3a50;
+      --accent: #7c6ff7;
+      --accent-hover: #9d8fff;
+      --danger: #e05c5c;
+      --text: #e0e0f0;
+      --text-dim: #9090a8;
+      --canvas-bg: #404055;
+      --tool-active: #7c6ff7;
+    }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
+
+    /* ===== HEADER ===== */
+    #header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px; background: var(--panel); border-bottom: 1px solid var(--border);
+      flex-shrink: 0; min-height: 46px; flex-wrap: wrap;
+    }
+    #header h1 { font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+    .h-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+    .h-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--text); cursor: pointer; font-size: 12px;
+      white-space: nowrap; transition: background .15s, border-color .15s;
+    }
+    .h-btn:hover { background: var(--border); border-color: var(--accent); }
+    .h-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .h-btn.primary:hover { background: var(--accent-hover); }
+    .h-dropdown { position: relative; }
+    .h-dropdown-menu {
+      display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 999;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.3); min-width: 160px; overflow: hidden;
+    }
+    .h-dropdown-menu button {
+      display: block; width: 100%; text-align: left; padding: 8px 14px;
+      background: none; border: none; color: var(--text); font-size: 12px; cursor: pointer;
+    }
+    .h-dropdown-menu button:hover { background: var(--border); }
+    .h-dropdown.open .h-dropdown-menu { display: block; }
+    #zoom-display { font-size: 12px; color: var(--text-dim); min-width: 42px; text-align: center; }
+    #page-info { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+    .spacer { flex: 1; }
+
+    /* ===== MAIN LAYOUT ===== */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ===== TOOL SIDEBAR (gauche) ===== */
+    #tool-sidebar {
+      width: 46px; background: var(--panel); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 6px 0; gap: 2px; flex-shrink: 0; overflow-y: auto;
+    }
+    .tool-btn {
+      width: 36px; height: 36px; border-radius: 6px; border: 1px solid transparent;
+      background: transparent; color: var(--text-dim); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; transition: all .15s; position: relative;
+    }
+    .tool-btn:hover { background: var(--panel2); color: var(--text); border-color: var(--border); }
+    .tool-btn.active { background: var(--tool-active); color: #fff; border-color: var(--tool-active); }
+    .tool-sep { width: 26px; height: 1px; background: var(--border); margin: 3px 0; }
+    .tool-btn[title]:hover::after {
+      content: attr(title); position: absolute; left: 44px; top: 50%; transform: translateY(-50%);
+      background: #111; color: #fff; padding: 3px 8px; border-radius: 4px;
+      font-size: 11px; white-space: nowrap; z-index: 1000; pointer-events: none;
+    }
+
+    /* ===== CANVAS AREA ===== */
+    #canvas-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--canvas-bg); position: relative; }
+    #canvas-wrapper { flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; }
+    #canvas-container { position: relative; }
+    #canvas-container canvas { display: block; }
+
+    /* ===== THUMBNAILS ===== */
+    #thumbnails {
+      height: 90px; background: var(--panel); border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+      overflow-x: auto; flex-shrink: 0;
+    }
+    #thumbnails::-webkit-scrollbar { height: 4px; }
+    #thumbnails::-webkit-scrollbar-track { background: var(--panel); }
+    #thumbnails::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .thumb {
+      flex-shrink: 0; width: 62px; height: 78px; border-radius: 4px; cursor: pointer;
+      border: 2px solid transparent; overflow: hidden; position: relative;
+      background: #333; transition: border-color .15s;
+    }
+    .thumb.active { border-color: var(--accent); }
+    .thumb:hover { border-color: var(--text-dim); }
+    .thumb canvas { width: 100% !important; height: 100% !important; object-fit: contain; }
+    .thumb-num {
+      position: absolute; bottom: 2px; right: 4px; font-size: 10px; color: #fff;
+      text-shadow: 0 1px 2px #000;
+    }
+    .thumb-rot-btn {
+      position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,.5);
+      border: none; color: #fff; cursor: pointer; font-size: 11px;
+      width: 18px; height: 18px; border-radius: 3px; display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity .15s;
+    }
+    .thumb:hover .thumb-rot-btn { opacity: 1; }
+
+    /* ===== RIGHT SIDEBAR ===== */
+    #right-sidebar {
+      width: 240px; background: var(--panel); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
+    }
+    .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .sidebar-tab {
+      flex: 1; padding: 7px 4px; text-align: center; cursor: pointer;
+      font-size: 11px; color: var(--text-dim); border-bottom: 2px solid transparent;
+      transition: all .15s;
+    }
+    .sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .sidebar-tab:hover { color: var(--text); }
+    .sidebar-panel { display: none; flex: 1; overflow-y: auto; }
+    .sidebar-panel.active { display: flex; flex-direction: column; }
+    .sidebar-panel::-webkit-scrollbar { width: 4px; }
+    .sidebar-panel::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ===== LAYERS PANEL ===== */
+    #panel-layers { padding: 8px; gap: 6px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .panel-title { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+    .icon-btn {
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      border-radius: 4px; cursor: pointer; font-size: 13px; padding: 2px 6px;
+      transition: all .15s;
+    }
+    .icon-btn:hover { background: var(--panel2); color: var(--text); border-color: var(--accent); }
+    .layer-item {
+      display: flex; align-items: center; gap: 5px; padding: 5px 6px;
+      border-radius: 5px; border: 1px solid transparent; cursor: pointer;
+      transition: all .15s; position: relative;
+    }
+    .layer-item:hover { background: var(--panel2); border-color: var(--border); }
+    .layer-item.active { background: rgba(124,111,247,.15); border-color: var(--accent); }
+    .layer-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .layer-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .layer-name-input {
+      flex: 1; background: var(--panel2); border: 1px solid var(--accent); color: var(--text);
+      border-radius: 3px; padding: 1px 4px; font-size: 12px; outline: none;
+    }
+    .layer-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 1px; line-height: 1; }
+    .layer-btn:hover { color: var(--text); }
+    .layer-btn.locked { color: var(--danger); }
+    .layer-btn.hidden { color: var(--text-dim); opacity: .5; }
+
+    /* ===== PROPERTIES PANEL ===== */
+    #panel-props { padding: 8px; gap: 8px; }
+    .prop-group { display: flex; flex-direction: column; gap: 4px; }
+    .prop-label { font-size: 11px; color: var(--text-dim); }
+    .prop-row { display: flex; align-items: center; gap: 6px; }
+    .prop-color { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+    .prop-range { flex: 1; accent-color: var(--accent); }
+    .prop-select {
+      flex: 1; background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 4px; padding: 4px; font-size: 12px; outline: none;
+    }
+    .prop-select:focus { border-color: var(--accent); }
+    .prop-num {
+      width: 44px; background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 4px; padding: 3px 5px; font-size: 12px; text-align: center; outline: none;
+    }
+    .prop-num:focus { border-color: var(--accent); }
+    .calibration-info {
+      background: var(--panel2); border-radius: 5px; padding: 6px 8px;
+      font-size: 11px; color: var(--text-dim); border: 1px solid var(--border);
+    }
+    .calibration-info.calibrated { border-color: #4caf50; color: #4caf50; }
+
+    /* ===== SYMBOLS PANEL ===== */
+    #panel-symbols { padding: 8px; gap: 0; }
+    .sym-category { margin-bottom: 4px; }
+    .sym-category-title {
+      font-size: 11px; font-weight: 600; color: var(--text-dim); padding: 4px 2px;
+      border-bottom: 1px solid var(--border); margin-bottom: 5px;
+      cursor: pointer; user-select: none;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .sym-category-title:hover { color: var(--text); }
+    .sym-category-title .sym-cat-arrow { font-size: 9px; transition: transform 0.15s; display: inline-block; }
+    .sym-category.collapsed .sym-cat-arrow { transform: rotate(-90deg); }
+    .sym-category.collapsed .sym-grid { display: none; }
+    .sym-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .sym-item {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 5px 3px; border-radius: 5px; border: 1px solid var(--border);
+      cursor: grab; background: var(--panel2); transition: all .15s; user-select: none;
+    }
+    .sym-item:hover { border-color: var(--accent); background: rgba(124,111,247,.1); }
+    .sym-item:active { cursor: grabbing; }
+    .sym-preview { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+    .sym-preview svg { max-width: 40px; max-height: 40px; }
+    .sym-label { font-size: 9px; color: var(--text-dim); text-align: center; line-height: 1.2; }
+
+    /* ===== MODALS ===== */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      display: none; align-items: center; justify-content: center; z-index: 9000;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+      padding: 20px; min-width: 320px; max-width: 520px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    }
+    .modal h2 { font-size: 15px; margin-bottom: 14px; color: var(--text); }
+    .modal-body { display: flex; flex-direction: column; gap: 10px; }
+    .modal label { font-size: 12px; color: var(--text-dim); display: flex; flex-direction: column; gap: 3px; }
+    .modal input[type=text], .modal input[type=number], .modal select {
+      background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 5px; padding: 6px 10px; font-size: 13px; outline: none; width: 100%;
+    }
+    .modal input:focus, .modal select:focus { border-color: var(--accent); }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    .modal-btn {
+      padding: 6px 16px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--text); cursor: pointer; font-size: 13px; transition: all .15s;
+    }
+    .modal-btn:hover { background: var(--border); }
+    .modal-btn.confirm { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .modal-btn.confirm:hover { background: var(--accent-hover); }
+
+    /* Export modal */
+    .layer-export-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+    .layer-export-item label { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; }
+    .layer-export-item input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+    /* Notifications */
+    #toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: #2a2a3e; border: 1px solid var(--accent); color: var(--text);
+      padding: 8px 18px; border-radius: 6px; font-size: 12px;
+      opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 9999;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Indicateur mode calibrage */
+    #calib-indicator {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,200,0,.9); color: #000; padding: 5px 14px;
+      border-radius: 20px; font-size: 12px; font-weight: 600; display: none; z-index: 100;
+      pointer-events: none;
+    }
+    #calib-indicator.visible { display: block; }
+
+    /* Drag ghost (symbole en cours de drag) */
+    #drag-ghost {
+      position: fixed; pointer-events: none; z-index: 9999;
+      opacity: .7; transform: translate(-50%, -50%); display: none;
+    }
+
+    /* Champs dimensions header */
+    .dim-input {
+      width: 68px; background: var(--panel2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px; padding: 3px 6px; font-size: 12px;
+      text-align: right; outline: none; -moz-appearance: textfield;
+    }
+    .dim-input::-webkit-outer-spin-button,
+    .dim-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .dim-input:focus { border-color: var(--accent); }
+    #dim-display { display: none; align-items: center; gap: 4px; }
+    #dim-unit { font-size: 11px; color: var(--text-dim); min-width: 22px; }
+
+    /* Scrollbar globale */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header id="header">
+  <h1>📐 Annoteur Plans</h1>
+  <div class="h-sep"></div>
+  <button class="h-btn" id="btn-open-pdf" title="Importer un PDF">📂 Ouvrir PDF</button>
+  <div class="h-dropdown" id="projet-dropdown">
+    <button class="h-btn" id="btn-projet">📁 Projet ▾</button>
+    <div class="h-dropdown-menu">
+      <button id="btn-load-project">📂 Ouvrir projet…</button>
+      <button id="btn-save-project">💾 Sauver projet</button>
+    </div>
+  </div>
+  <div class="h-sep"></div>
+  <button class="h-btn" id="btn-zoom-out" title="Dézoomer (ou molette)">🔍−</button>
+  <span id="zoom-display">100%</span>
+  <button class="h-btn" id="btn-zoom-in" title="Zoomer (ou molette)">🔍+</button>
+  <button class="h-btn" id="btn-zoom-fit" title="Ajuster à la fenêtre">⊞</button>
+  <div class="h-sep" id="dim-sep" style="display:none"></div>
+  <div id="dim-display">
+    <span style="font-size:11px;color:var(--text-dim)">L</span>
+    <input type="number" id="dim-w" class="dim-input" step="0.01" min="0.1" title="Largeur — appuyer sur Entrée pour appliquer">
+    <span style="font-size:11px;color:var(--text-dim)">H</span>
+    <input type="number" id="dim-h" class="dim-input" step="0.01" min="0.1" title="Hauteur — appuyer sur Entrée pour appliquer">
+    <span id="dim-unit">px</span>
+  </div>
+  <div class="h-sep"></div>
+  <span id="page-info">— / —</span>
+  <div class="spacer"></div>
+  <button class="h-btn primary" id="btn-export" title="Exporter en PDF">⬇️ Exporter PDF</button>
+</header>
+
+<!-- ===== MAIN ===== -->
+<div id="main">
+
+  <!-- Toolbar gauche : outils de dessin -->
+  <div id="tool-sidebar">
+    <button class="tool-btn active" data-tool="select" title="Sélection (V)"><svg viewBox="0 0 16 20" width="14" height="17" fill="currentColor"><path d="M2 1 L2 15 L5.5 11.5 L8.2 17.5 L10 16.8 L7.3 11 L12 11 Z"/></svg></button>
+    <button class="tool-btn" data-tool="pan" title="Déplacer la vue (Espace)">✋</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" data-tool="line" title="Ligne (L)">╱</button>
+    <button class="tool-btn" data-tool="polyline" title="Polyligne (P) — Dbl-clic pour terminer">📐</button>
+    <button class="tool-btn" data-tool="polygon" title="Polygone (G) — Dbl-clic pour fermer">⬡</button>
+    <button class="tool-btn" data-tool="rect" title="Rectangle (R)">▭</button>
+    <button class="tool-btn" data-tool="circle" title="Cercle/Ellipse (C)">○</button>
+    <button class="tool-btn" data-tool="freedraw" title="Dessin libre (F)">✏️</button>
+    <button class="tool-btn" data-tool="cloud" title="Nuage de révision (N)">☁</button>
+    <button class="tool-btn" data-tool="text" title="Texte (T)">T</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" data-tool="measure" title="Cote/Mesure (M)">⟵⟶</button>
+    <button class="tool-btn" data-tool="calibrate" title="Calibrer la page (K)">🎯</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="btn-undo" title="Annuler (Ctrl+Z)">↩</button>
+    <button class="tool-btn" id="btn-delete" title="Supprimer sélection (Suppr)">🗑</button>
+  </div>
+
+  <!-- Zone canvas -->
+  <div id="canvas-area">
+    <div id="canvas-wrapper">
+      <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+      </div>
+      <div id="calib-indicator">🎯 Cliquez deux points pour calibrer — Échap pour annuler</div>
+      <div id="measure-indicator" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(100,200,255,.9);color:#000;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;pointer-events:none;z-index:100">
+        📏 Cliquez deux points pour mesurer — Échap pour annuler
+      </div>
+    </div>
+    <!-- Bande de miniatures -->
+    <div id="thumbnails">
+      <span id="thumb-hint" style="color:var(--text-dim);font-size:11px;white-space:nowrap">Ouvrir un PDF pour commencer</span>
+    </div>
+  </div>
+
+  <!-- Sidebar droite : calques / propriétés / symboles -->
+  <div id="right-sidebar">
+    <div class="sidebar-tabs">
+      <div class="sidebar-tab active" data-panel="layers">Calques</div>
+      <div class="sidebar-tab" data-panel="props">Style</div>
+      <div class="sidebar-tab" data-panel="symbols">Symboles</div>
+    </div>
+
+    <!-- Panneau Calques -->
+    <div id="panel-layers" class="sidebar-panel active">
+      <div class="panel-header">
+        <span class="panel-title">Calques</span>
+        <button class="icon-btn" id="btn-add-layer" title="Nouveau calque">+</button>
+      </div>
+      <div id="layers-list"></div>
+    </div>
+
+    <!-- Panneau Style / Propriétés -->
+    <div id="panel-props" class="sidebar-panel">
+      <div class="prop-group">
+        <div class="prop-label">Contour</div>
+        <div class="prop-row">
+          <input type="color" class="prop-color" id="prop-stroke-color" value="#e53e3e" title="Couleur du contour">
+          <span class="prop-label" style="flex:1">Épaisseur</span>
+          <input type="number" class="prop-num" id="prop-stroke-width" value="2" min="0.5" max="50" step="0.5">
+        </div>
+      </div>
+      <div class="prop-group">
+        <div class="prop-label">Remplissage</div>
+        <div class="prop-row">
+          <input type="color" class="prop-color" id="prop-fill-color" value="#ff000022" title="Couleur de remplissage">
+          <select class="prop-select" id="prop-fill-mode">
+            <option value="transparent">Transparent</option>
+            <option value="solid">Uni</option>
+          </select>
+        </div>
+      </div>
+      <div class="prop-group">
+        <div class="prop-label">Style de ligne</div>
+        <div class="prop-row">
+          <select class="prop-select" id="prop-dash">
+            <option value="solid">Plein</option>
+            <option value="dashed">Tirets</option>
+            <option value="dotted">Pointillés</option>
+          </select>
+        </div>
+      </div>
+      <div class="prop-group">
+        <div class="prop-label">Opacité : <span id="prop-opacity-val">100</span>%</div>
+        <input type="range" class="prop-range" id="prop-opacity" min="10" max="100" value="100">
+      </div>
+      <div class="prop-group" id="prop-text-group">
+        <div class="prop-label">Texte</div>
+        <div class="prop-row">
+          <input type="color" class="prop-color" id="prop-text-color" value="#000000">
+          <span class="prop-label">Taille</span>
+          <input type="number" class="prop-num" id="prop-font-size" value="16" min="6" max="120">
+        </div>
+      </div>
+      <div class="prop-group">
+        <div class="prop-label">Calibration — Page <span id="calib-page-num">—</span></div>
+        <div class="calibration-info" id="calib-status">Non calibrée</div>
+        <button class="icon-btn" style="width:100%;margin-top:4px" id="btn-calib-scale" title="Saisir une échelle connue">Saisir échelle (1:50, 1:100…)</button>
+      </div>
+    </div>
+
+    <!-- Panneau Symboles -->
+    <div id="panel-symbols" class="sidebar-panel">
+      <!-- Couleur des tracés des symboles -->
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px 6px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <span style="font-size:11px;color:var(--text-dim)">Couleur des tracés</span>
+        <input type="color" id="symbol-color" value="#000000" class="prop-color" title="Couleur des lignes des symboles placés">
+        <button class="icon-btn" id="symbol-color-reset" title="Réinitialiser au noir" style="font-size:10px;padding:1px 5px">↺</button>
+      </div>
+      <div id="symbol-library" style="padding:0 0 8px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Modal calibration par segment -->
+<div class="modal-backdrop" id="modal-calib">
+  <div class="modal">
+    <h2>🎯 Calibration par segment</h2>
+    <div class="modal-body">
+      <label>Distance réelle mesurée
+        <div style="display:flex;gap:8px;align-items:center;margin-top:3px">
+          <input type="number" id="calib-real-dist" min="0.001" step="any" placeholder="ex: 3.5" style="flex:1">
+          <select id="calib-unit" style="width:70px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px">
+            <option value="m">m</option>
+            <option value="cm" selected>cm</option>
+            <option value="mm">mm</option>
+          </select>
+        </div>
+      </label>
+      <div style="font-size:11px;color:var(--text-dim)">Distance en pixels : <strong id="calib-px-dist">—</strong> px</div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="calib-cancel">Annuler</button>
+      <button class="modal-btn confirm" id="calib-confirm">Calibrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal calibration par échelle -->
+<div class="modal-backdrop" id="modal-calib-scale">
+  <div class="modal">
+    <h2>📏 Calibration par échelle</h2>
+    <div class="modal-body">
+      <label>Échelle du plan
+        <select id="scale-preset" style="margin-top:3px">
+          <option value="">— Choisir —</option>
+          <option value="20">1:20</option>
+          <option value="25">1:25</option>
+          <option value="50">1:50</option>
+          <option value="100">1:100</option>
+          <option value="200">1:200</option>
+          <option value="500">1:500</option>
+          <option value="custom">Personnalisé</option>
+        </select>
+      </label>
+      <label id="custom-scale-label" style="display:none">Dénominateur de l'échelle
+        <input type="number" id="scale-custom" placeholder="ex: 75 pour 1:75" min="1">
+      </label>
+      <label>Unité d'affichage
+        <select id="scale-unit">
+          <option value="m">Mètres (m)</option>
+          <option value="cm" selected>Centimètres (cm)</option>
+        </select>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="scale-cancel">Annuler</button>
+      <button class="modal-btn confirm" id="scale-confirm">Appliquer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal export PDF -->
+<div class="modal-backdrop" id="modal-export">
+  <div class="modal" style="max-width:440px">
+    <h2>⬇️ Exporter en PDF</h2>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Calques à inclure dans l'export :</div>
+      <div id="export-layers-list"></div>
+      <label style="margin-top:6px">Format de page
+        <select id="export-format">
+          <option value="original" selected>Original (taille du PDF source)</option>
+          <option value="a4">A4 — 210 × 297 mm (orientation auto)</option>
+          <option value="a3">A3 — 297 × 420 mm (orientation auto)</option>
+        </select>
+      </label>
+      <label style="margin-top:6px">Résolution d'export
+        <select id="export-resolution">
+          <option value="1.5">Standard (×1.5)</option>
+          <option value="2" selected>Haute (×2 — recommandé)</option>
+          <option value="3">Très haute (×3 — lent)</option>
+        </select>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="export-cancel">Annuler</button>
+      <button class="modal-btn confirm" id="export-confirm">Exporter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal renommer calque -->
+<div class="modal-backdrop" id="modal-rename-layer">
+  <div class="modal" style="max-width:320px">
+    <h2>✏️ Renommer le calque</h2>
+    <div class="modal-body">
+      <label>Nouveau nom
+        <input type="text" id="rename-layer-input" maxlength="40" style="margin-top:3px">
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="rename-layer-cancel">Annuler</button>
+      <button class="modal-btn confirm" id="rename-layer-confirm">Renommer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ghost de drag pour les symboles -->
+<div id="drag-ghost"></div>
+
+<!-- Toast notifications -->
+<div id="toast"></div>
+
+<!-- Input fichiers cachés -->
+<input type="file" id="input-pdf" accept=".pdf" style="display:none">
+<input type="file" id="input-project" accept=".json,.annot.json" style="display:none">
+<input type="file" id="input-custom-svg" accept=".svg,.png,.jpg,.jpeg" style="display:none">
+
+<!-- ===== SCRIPTS ===== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="symbols.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "annoteur",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "3335", "-s", "."],
+      "port": 3335
+    }
+  ]
+}
