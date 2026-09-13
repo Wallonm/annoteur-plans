@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.3.0';   // Lot 2 — Fondation : repère en points PDF
+const APP_VERSION  = '1.3.1';   // Lot 2 — Fondation : repère en points PDF
 const PROJECT_FORMAT = '2.0';   // coordonnées en points PDF (v1.x : pixels écran)
 
 // === Configuration PDF.js ===
@@ -1872,10 +1872,12 @@ async function rotatePage(pageNum) {
 
   if (pageNum === App.currentPage) {
     resetDrawState();
-    rotateCanvasObjects90(pageH);
+    rotateObjects90(App.canvas.getObjects(), pageH);
+    App.canvas.discardActiveObject();
+    App.canvas.requestRenderAll();
     saveCurrentPageObjects();
   } else {
-    pd.objects = (pd.objects || []).map(o => rotateSerializedObject90(o, pageH));
+    pd.objects = await rotatePageObjectsOffscreen(pd.objects || [], pageH);
   }
 
   pd.rotation = ((pd.rotation || 0) + 90) % 360;
@@ -1886,20 +1888,25 @@ async function rotatePage(pageNum) {
   saveHistoryState();
 }
 
-// Fait tourner de 90° tous les objets vivants du canvas
-function rotateCanvasObjects90(pageH) {
-  const fc = App.canvas;
-  fc.discardActiveObject();
-  fc.getObjects().forEach(obj => {
+// Fait tourner de 90° une liste d'objets Fabric vivants.
+// `getCenterPoint` / `setPositionByOrigin` gèrent correctement les objets déjà
+// tournés et les origines non standard — un calcul sur la boîte left/top les
+// aurait décalés, l'erreur s'accumulant à chaque rotation.
+function rotateObjects90(objects, pageH) {
+  objects.forEach(obj => {
     if (isTempObject(obj)) return;
     const c  = obj.getCenterPoint();
     const nc = rotatePoint90({ x: c.x, y: c.y }, pageH);
     obj.set('angle', normalizeAngle((obj.angle || 0) + 90));
     obj.setPositionByOrigin(new fabric.Point(nc.x, nc.y), 'center', 'center');
-    if (obj.data) rotateDimData90(obj.data, pageH);
     obj.setCoords();
+    if (obj.data) {
+      rotateDimData90(obj.data, pageH);
+      // Le suivi de déplacement des cotes repart du nouveau centre : le laisser
+      // à null ferait échouer la première synchronisation après rotation.
+      if (obj.data.type === 'dimension') obj.data._lastCenter = obj.getCenterPoint();
+    }
   });
-  fc.requestRenderAll();
 }
 
 // Les cotes portent leurs points de mesure en coordonnées absolues
@@ -1907,24 +1914,23 @@ function rotateDimData90(data, pageH) {
   for (const key of ['p1', 'p2', 'offsetPt']) {
     if (data[key] && typeof data[key].x === 'number') data[key] = rotatePoint90(data[key], pageH);
   }
-  if (data._lastCenter) data._lastCenter = null;
 }
 
-// Même rotation, appliquée à un objet sérialisé (page non affichée).
-// On n'a pas le centre exact sans Fabric : on utilise la boîte left/top,
-// suffisant car ces objets sont ré-hydratés puis recalés au chargement.
-function rotateSerializedObject90(obj, pageH) {
-  const o = { ...obj };
-  const w = (o.width  || 0) * (o.scaleX || 1);
-  const h = (o.height || 0) * (o.scaleY || 1);
-  const center = { x: (o.left || 0) + w / 2, y: (o.top || 0) + h / 2 };
-  const nc = rotatePoint90(center, pageH);
-  // Après rotation, largeur et hauteur apparentes s'échangent
-  o.left  = nc.x - h / 2;
-  o.top   = nc.y - w / 2;
-  o.angle = normalizeAngle((o.angle || 0) + 90);
-  if (o.data) { o.data = { ...o.data }; rotateDimData90(o.data, pageH); }
-  return o;
+// Rotation des objets d'une page NON affichée : ils sont ré-hydratés dans un
+// canvas jetable pour réutiliser exactement le même code que la page courante.
+function rotatePageObjectsOffscreen(serialized, pageH) {
+  if (!serialized.length) return Promise.resolve(serialized);
+  return new Promise(resolve => {
+    fabric.util.enlivenObjects(serialized, (objs) => {
+      const tmp = new fabric.StaticCanvas(null, { width: 10, height: 10 });
+      objs.forEach(o => tmp.add(o));
+      rotateObjects90(objs, pageH);
+      const out = tmp.toJSON(['data', 'objectType', 'strokeUniform'])
+                     .objects.map(stripVolatileData);
+      tmp.dispose();
+      resolve(out);
+    });
+  });
 }
 
 // ============================================================
