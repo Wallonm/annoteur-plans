@@ -1,5 +1,60 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.4.0 — Lot 3 : Confort
+
+### Changé — historique
+
+- **Annuler/rétablir entièrement réécrits.** L'historique est désormais tenu **par page**,
+  avec un instantané initial. Corrige d'un coup :
+  - la première action d'une page n'était pas annulable,
+  - après un changement de page, annuler ne faisait plus rien silencieusement,
+  - il n'existait aucun rétablissement.
+- **`Ctrl+Maj+Z` et `Ctrl+Y` rétablissent**, bouton ↪ dans la barre d'outils. Les boutons
+  annuler/rétablir se grisent quand il n'y a rien à faire.
+- **Un glissement de curseur = une seule entrée d'historique.** Les contrôles continus
+  (opacité, couleurs) appliquent en direct mais n'enregistrent qu'au relâchement.
+  Vérifié : 13 mouvements du curseur d'opacité → 1 entrée (contre 13 avant, ce qui
+  saturait la pile de 30 et détruisait l'historique réel). Capacité portée à 50.
+- **Les opérations de calque sont annulables** (ajout, suppression, renommage,
+  visibilité, verrouillage) : l'instantané couvre objets *et* calques.
+
+### Changé — calques
+
+- **Les calques sont globaux au document**, et non plus par page. Le modèle précédent
+  était incohérent : calques stockés par page, identifiants globaux, suppression
+  effaçant les objets de toutes les pages, et objets calque partagés par référence
+  entre pages (renommer sur une page en affectait une autre).
+- **Migration automatique** des projets 2.0 → 2.1 : union des calques par identifiant,
+  `nextLayerId` recalculé. Vérifié sur le projet réel : 5 calques remontés sans doublon,
+  132 annotations intactes.
+- La fenêtre d'export liste les calques une seule fois, sans suffixe `(p.N)`.
+
+### Ajouté — tracé
+
+- **Contrainte d'angle avec `Maj`** (multiples de 45°) sur ligne, polyligne, polygone,
+  cote et calibration. Il était jusqu'ici impossible de tracer une ligne exactement
+  horizontale, ce qui rendait toute cotation approximative.
+- **Accrochage aux extrémités et sommets** existants (8 px écran), avec repère vert.
+  Les candidats sont mis en cache à chaque appui plutôt que recalculés à chaque
+  mouvement de souris.
+- **Ordre d'empilement** : premier plan / arrière-plan (boutons + `Ctrl+]` / `Ctrl+[`,
+  avec `Maj` pour aller directement aux extrêmes).
+
+### Ajouté — aide
+
+- **Panneau des raccourcis clavier** (`?` ou `F1`), construit à partir de la table
+  réellement utilisée par le gestionnaire clavier — il ne peut donc plus diverger du
+  code, ce qui était le cas de l'infobulle annonçant « Espace » pour un raccourci « H ».
+
+### Corrigé
+
+- **Accrochage et poignées imprécis d'une demi-épaisseur de trait.** Fabric calcule le
+  centre de transformation d'une `Line` en incluant l'épaisseur, alors que ses
+  coordonnées locales en sont indépendantes : les extrémités tombaient 1 pt à côté.
+  Les polygones, eux, n'étaient pas concernés — leur `left` intègre déjà ce décalage.
+- La saisie d'épaisseur et de corps de texte est bornée (plus de valeur nulle ou
+  négative).
+
 ## v1.3.0 — Lot 2 : Fondation (repère en points PDF)
 
 Le chantier de fond : les annotations ne sont plus stockées en pixels écran.

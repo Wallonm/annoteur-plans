@@ -1,4 +1,4 @@
-// Tests de migration v1.1 → v2.0, sur cas synthétiques ET sur le projet réel.
+// Tests de migration v1.x → v2.1, sur cas synthétiques ET sur le projet réel.
 const test   = require('node:test');
 const assert = require('node:assert/strict');
 const fs     = require('node:fs');
@@ -62,23 +62,33 @@ test('migratePage : une page jamais affichée est laissée intacte', () => {
   assert.equal(page.rotation, 90);
 });
 
-test('migrateProject : v1.0 (calques globaux) répartis par page', () => {
+test('migrateProject : v1.0 (calques déjà globaux) traversé sans perte', () => {
   const { data } = migrateProject({
     version: '1.0',
     layers: [{ id: 1, name: 'Calque 1', visible: true, locked: false, color: '#fff' }],
     pages: { 1: { renderScale: 1, objects: [] } },
   });
-  assert.equal(data.version, '2.0');
-  assert.equal(data.pages['1'].layers.length, 1);
-  assert.equal(data.pages['1'].activeLayerId, 1);
-  assert.equal(data.layers, undefined);
+  assert.equal(data.version, '2.1');
+  assert.deepEqual(data.layers.map(l => l.name), ['Calque 1']);
+  assert.equal(data.activeLayerId, 1);
+  assert.equal(data.pages['1'].layers, undefined, 'les calques ne sont plus par page');
 });
 
-test('migrateProject : idempotent, un projet v2.0 n’est pas reconverti', () => {
-  const v2 = { version: '2.0', pages: { 1: { objects: [{ left: 42 }] } } };
-  const { data, notes } = migrateProject(v2);
+test('migrateProject : un projet 2.1 n’est pas reconverti', () => {
+  const v21 = { version: '2.1', layers: [], pages: { 1: { objects: [{ left: 42 }] } } };
+  const { data, notes } = migrateProject(v21);
   assert.equal(data.pages['1'].objects[0].left, 42);
   assert.equal(notes.length, 0);
+});
+
+test('migrateProject : un projet 2.0 est repris à l’étape des calques seulement', () => {
+  const { data, notes } = migrateProject({
+    version: '2.0',
+    pages: { 1: { objects: [{ left: 42 }], layers: [{ id: 4, name: 'X' }], activeLayerId: 4 } },
+  });
+  assert.equal(data.pages['1'].objects[0].left, 42, 'aucune reconversion de coordonnées');
+  assert.deepEqual(data.layers.map(l => l.id), [4]);
+  assert.ok(notes.some(n => /calque/.test(n)));
 });
 
 test('migrateProject : format inconnu rejeté explicitement', () => {
@@ -95,7 +105,7 @@ test('projet réel : conversion complète et cohérente', { skip: !fs.existsSync
   const src = JSON.parse(fs.readFileSync(fixture, 'utf8'));
   const { data, notes } = migrateProject(src);
 
-  assert.equal(data.version, '2.0');
+  assert.equal(data.version, '2.1');
   assert.ok(notes.some(n => /échelles d'affichage différentes/.test(n)),
             'le projet contient bien plusieurs repères, ce doit être signalé');
 
@@ -157,4 +167,80 @@ test('projet réel : calibrations converties dans un ordre de grandeur plausible
     assert.ok(!('pixelsPerUnit' in c), 'plus aucune calibration en pixels');
     assert.ok(['m', 'cm', 'mm'].includes(c.unit));
   }
+});
+
+// ------------------------------------------------------------
+// 2.0 → 2.1 : calques globaux
+// ------------------------------------------------------------
+const { liftLayersToDocument } = require('../migrate.js');
+
+test('liftLayersToDocument : union par identifiant, premier nom conservé', () => {
+  const { data, count } = liftLayersToDocument({
+    nextLayerId: 2,
+    pages: {
+      1: { objects: [], layers: [{ id: 1, name: 'Existant' }, { id: 3, name: 'Réseaux' }],
+           activeLayerId: 3 },
+      2: { objects: [], layers: [{ id: 3, name: 'Réseaux (bis)' }, { id: 7, name: 'Cotes' }],
+           activeLayerId: 7 },
+    },
+  });
+
+  assert.equal(count, 3);
+  assert.deepEqual(data.layers.map(l => l.id), [1, 3, 7]);
+  assert.equal(data.layers.find(l => l.id === 3).name, 'Réseaux', 'premier nom rencontré');
+  assert.equal(data.activeLayerId, 3);
+  assert.ok(data.nextLayerId >= 8, `nextLayerId doit dépasser le plus grand id (obtenu ${data.nextLayerId})`);
+  assert.equal(data.pages['1'].layers, undefined, 'plus de calques par page');
+  assert.equal(data.pages['2'].activeLayerId, undefined);
+});
+
+test('liftLayersToDocument : projet sans aucun calque', () => {
+  const { data, count } = liftLayersToDocument({ pages: { 1: { objects: [] } } });
+  assert.equal(count, 0);
+  assert.deepEqual(data.layers, []);
+  assert.equal(data.activeLayerId, null);
+  assert.equal(data.nextLayerId, 1);
+});
+
+test('migrateProject : v1.1 → 2.1 en une passe (points PDF + calques globaux)', () => {
+  const { data, notes } = migrateProject({
+    version: '1.1', nextLayerId: 3,
+    pages: {
+      1: { renderScale: 0.5, canvasOffsetX: 10, canvasOffsetY: 0,
+           objects: [{ type: 'rect', left: 60, top: 20, data: { layerId: 1 } }],
+           layers: [{ id: 1, name: 'A' }], activeLayerId: 1,
+           calibration: { pixelsPerUnit: 2, unit: 'cm' } },
+      2: { renderScale: 0.25, canvasOffsetX: 0, canvasOffsetY: 0, objects: [],
+           layers: [{ id: 2, name: 'B' }], activeLayerId: 2 },
+    },
+  });
+
+  assert.equal(data.version, '2.1');
+  close(data.pages['1'].objects[0].left, (60 - 10) / 0.5);      // 100
+  close(data.pages['1'].calibration.pointsPerUnit, 4);
+  assert.deepEqual(data.layers.map(l => l.name), ['A', 'B']);
+  assert.equal(data.pages['1'].layers, undefined);
+  assert.ok(notes.length >= 2, 'les deux étapes doivent être signalées');
+});
+
+test('projet réel : les calques remontent au document sans doublon', { skip: !fs.existsSync(fixture) }, () => {
+  const src = JSON.parse(fs.readFileSync(fixture, 'utf8'));
+  const { data } = migrateProject(src);
+
+  const idsSource = new Set();
+  Object.values(src.pages).forEach(p => (p.layers || []).forEach(l => idsSource.add(l.id)));
+
+  assert.equal(data.version, '2.1');
+  assert.deepEqual(new Set(data.layers.map(l => l.id)), idsSource,
+                   'tous les identifiants de calque sont conservés, sans doublon');
+  assert.equal(data.layers.length, idsSource.size);
+  const maxId = Math.max(...data.layers.map(l => l.id));
+  assert.ok(data.nextLayerId > maxId, 'nextLayerId au-dessus du plus grand identifiant');
+
+  // Tous les objets référencent un calque existant
+  const connus = new Set(data.layers.map(l => l.id));
+  Object.values(data.pages).forEach(p => (p.objects || []).forEach(o => {
+    if (o.data?.layerId != null) assert.ok(connus.has(o.data.layerId),
+      `calque ${o.data.layerId} référencé mais absent`);
+  }));
 });

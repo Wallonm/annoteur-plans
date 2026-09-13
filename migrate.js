@@ -13,7 +13,7 @@
 // redimensionnée en cours de session.
 // ============================================================
 
-const PROJECT_FORMAT_CURRENT = '2.0';
+const PROJECT_FORMAT_CURRENT = '2.1';
 
 // Propriétés d'un objet Fabric qui sont des longueurs à mettre à l'échelle
 // lorsque le trait ne suit PAS la mise à l'échelle de l'objet (strokeUniform).
@@ -95,50 +95,105 @@ function migratePage(page) {
   return out;
 }
 
+// ------------------------------------------------------------
+// 2.0 → 2.1 : les calques deviennent globaux au document
+// ------------------------------------------------------------
+// Jusqu'en 2.0 les calques étaient stockés par page alors que leurs
+// identifiants étaient globaux et que la suppression d'un calque effaçait
+// les objets de TOUTES les pages — un modèle incohérent. Pour un jeu de
+// plans, l'attente est un jeu de calques unique.
+function liftLayersToDocument(data) {
+  const layers = [];
+  const seen   = new Map();
+  let activeLayerId = null;
+
+  Object.values(data.pages || {}).forEach(page => {
+    (page.layers || []).forEach(l => {
+      if (l == null || l.id == null) return;
+      if (!seen.has(l.id)) { seen.set(l.id, { ...l }); layers.push(seen.get(l.id)); }
+    });
+    if (activeLayerId == null && page.activeLayerId != null) activeLayerId = page.activeLayerId;
+  });
+
+  const out = { ...data, pages: {} };
+  Object.keys(data.pages || {}).forEach(key => {
+    const { layers: _l, activeLayerId: _a, ...rest } = data.pages[key];
+    out.pages[key] = rest;
+  });
+
+  out.layers        = layers;
+  out.activeLayerId = activeLayerId ?? layers[0]?.id ?? null;
+  // nextLayerId doit rester au-dessus de tous les identifiants existants
+  const maxId = layers.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0);
+  out.nextLayerId = Math.max(Number(data.nextLayerId) || 1, maxId + 1);
+
+  return { data: out, count: layers.length };
+}
+
 // Point d'entrée : migre un projet vers le format courant.
 // Retourne { data, notes } — `notes` décrit ce qui a été converti.
 function migrateProject(data) {
   const notes = [];
   if (!data || typeof data !== 'object') throw new Error('Projet illisible');
 
-  const version = String(data.version || '1.0');
+  let version = String(data.version || '1.0');
   if (version === PROJECT_FORMAT_CURRENT) return { data, notes };
 
-  if (version !== '1.0' && version !== '1.1') {
+  if (!['1.0', '1.1', '2.0'].includes(version)) {
     throw new Error(`Format de projet non pris en charge : ${version}`);
   }
 
-  const out = { ...data, version: PROJECT_FORMAT_CURRENT, pages: {} };
-  let converted = 0;
+  let out = { ...data, pages: { ...(data.pages || {}) } };
 
-  Object.keys(data.pages || {}).forEach(key => {
-    const page = data.pages[key] || {};
-    // v1.0 : calques globaux, recopiés sur chaque page
-    if (!page.layers && Array.isArray(data.layers)) {
-      page.layers        = data.layers.map(l => ({ ...l }));
-      page.activeLayerId = data.layers[0]?.id ?? null;
+  // --- Étape 1 : pixels écran → points PDF ---
+  if (version === '1.0' || version === '1.1') {
+    const pages = {};
+    let converted = 0;
+
+    Object.keys(out.pages).forEach(key => {
+      const page = { ...out.pages[key] };
+      // v1.0 : calques globaux, recopiés sur chaque page avant reprise à l'étape 2
+      if (!page.layers && Array.isArray(data.layers)) {
+        page.layers        = data.layers.map(l => ({ ...l }));
+        page.activeLayerId = data.layers[0]?.id ?? null;
+      }
+      pages[key] = migratePage(page);
+      if (page.renderScale > 0 && (page.objects || []).length) converted++;
+    });
+
+    out.pages = pages;
+    delete out.layers;
+
+    if (converted) {
+      notes.push(`${converted} page(s) converties des pixels écran vers les points PDF.`);
+      const scales = [...new Set(Object.values(data.pages || {})
+        .map(p => p.renderScale).filter(s => s > 0))];
+      if (scales.length > 1) {
+        notes.push(
+          `Ce projet contenait ${scales.length} échelles d'affichage différentes ` +
+          `(fenêtre redimensionnée en cours de session) : chaque page a été convertie ` +
+          `avec la sienne.`);
+      }
     }
-    out.pages[key] = migratePage(page);
-    if (page.renderScale > 0 && (page.objects || []).length) converted++;
-  });
+    version = '2.0';
+  }
 
-  delete out.layers;
-
-  if (converted) {
-    notes.push(`${converted} page(s) converties des pixels écran vers les points PDF.`);
-    const scales = [...new Set(Object.values(data.pages || {})
-      .map(p => p.renderScale).filter(s => s > 0))];
-    if (scales.length > 1) {
-      notes.push(
-        `Ce projet contenait ${scales.length} échelles d'affichage différentes ` +
-        `(fenêtre redimensionnée en cours de session) : chaque page a été convertie ` +
-        `avec la sienne.`);
+  // --- Étape 2 : calques par page → calques globaux ---
+  if (version === '2.0') {
+    const lifted = liftLayersToDocument(out);
+    out = lifted.data;
+    if (lifted.count) {
+      notes.push(`${lifted.count} calque(s) regroupés au niveau du document.`);
     }
   }
 
+  out.version = PROJECT_FORMAT_CURRENT;
   return { data: out, notes };
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { migrateProject, migratePage, migrateObject, PROJECT_FORMAT_CURRENT };
+  module.exports = {
+    migrateProject, migratePage, migrateObject, liftLayersToDocument,
+    PROJECT_FORMAT_CURRENT,
+  };
 }

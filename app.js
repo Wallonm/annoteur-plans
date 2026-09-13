@@ -2,8 +2,8 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.3.1';   // Lot 2 — Fondation : repère en points PDF
-const PROJECT_FORMAT = '2.0';   // coordonnées en points PDF (v1.x : pixels écran)
+const APP_VERSION  = '1.4.0';   // Lot 3 — Confort
+const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -73,9 +73,8 @@ const App = {
   lastPanX:    0,
   lastPanY:    0,
 
-  // Historique (undo simplifié : liste des états JSON par page)
-  history: [],
-  historyIndex: -1,
+  // Historique par page : { [pageNum]: { stack: [json], index } }
+  history: {},
 
   // Symbole en cours de drag depuis la palette
   dragSymbolId: null,
@@ -295,10 +294,86 @@ function initCanvas() {
 // ============================================================
 // GESTION ÉVÉNEMENTS SOURIS — Dispatch vers les outils
 // ============================================================
+// ============================================================
+// ACCROCHAGE (v1.4)
+// ------------------------------------------------------------
+// Maj  : contrainte d'angle à 45° depuis l'origine du tracé en cours.
+// Sinon : accrochage aux sommets des tracés existants (8 px écran).
+// Indispensable pour coter : en v1.1 il était impossible de tracer une
+// ligne exactement horizontale.
+// ============================================================
+const SNAP_TOL_SCREEN_PX = 8;
+
+let snapCandidates = null;   // recalculé à chaque appui, pas à chaque mouvement
+let snapMarker     = null;
+
+// Origine du tracé en cours, selon l'outil
+function currentDrawOrigin() {
+  if (App.draw.dimP1 && App.draw.step >= 1) return App.draw.dimP1;
+  if (App.draw.points.length) return App.draw.points[App.draw.points.length - 1];
+  if (App.draw.startPt) return App.draw.startPt;
+  return null;
+}
+
+// Sommets accrochables de la page (extrémités de lignes, sommets de polygones,
+// points de cote). Coûteux : mis en cache, jamais recalculé pendant un déplacement.
+function collectSnapCandidates() {
+  const pts = [];
+  App.canvas.getObjects().forEach(o => {
+    if (isTempObject(o) || !o.visible) return;
+    if (o.type === 'line') {
+      getLineAbsolutePoints(o).forEach(p => pts.push(p));
+    } else if ((o.type === 'polygon' || o.type === 'polyline') && o.points) {
+      getPolyAbsolutePoints(o).forEach(p => pts.push(p));
+    } else if (o.data?.p1) {
+      pts.push(o.data.p1, o.data.p2);
+    }
+  });
+  return pts;
+}
+
+// Applique l'accrochage à un point du plan
+function snapPoint(pt, e) {
+  const tool = App.activeTool;
+  if (!['line', 'polyline', 'polygon', 'measure', 'calibrate'].includes(tool)) return pt;
+
+  let out = pt;
+
+  // 1. Contrainte d'angle (Maj) — prioritaire, c'est un geste explicite
+  const origin = currentDrawOrigin();
+  if (e?.shiftKey && origin) {
+    out = constrainAngle(origin, pt, 45);
+  } else {
+    // 2. Accrochage aux sommets existants
+    if (!snapCandidates) snapCandidates = collectSnapCandidates();
+    const tol  = SNAP_TOL_SCREEN_PX / (App.canvas.getZoom() || 1);
+    const near = nearestPoint(pt, snapCandidates, tol);
+    if (near) out = { x: near.x, y: near.y };
+  }
+
+  showSnapMarker(out !== pt ? out : null);
+  return out;
+}
+
+// Repère visuel du point accroché
+function showSnapMarker(pt) {
+  const fc = App.canvas;
+  if (snapMarker) { fc.remove(snapMarker); snapMarker = null; }
+  if (!pt) return;
+  const s = 5 / (fc.getZoom() || 1);
+  snapMarker = new fabric.Path(
+    `M ${pt.x - s} ${pt.y - s} L ${pt.x + s} ${pt.y + s} M ${pt.x - s} ${pt.y + s} L ${pt.x + s} ${pt.y - s}`,
+    tempProps({ stroke: '#00ff88', strokeWidth: 1.5 / (fc.getZoom() || 1), fill: '' }));
+  fc.add(snapMarker);
+}
+
+function invalidateSnapCache() { snapCandidates = null; }
+
 function handleMouseDown(opt) {
   const e  = opt.e;
   const fc = App.canvas;
-  const pt = fc.getPointer(e);
+  invalidateSnapCache();                 // la page a pu changer depuis le dernier clic
+  const pt = snapPoint(fc.getPointer(e), e);
 
   // --- Pan : bouton central OU espace enfoncé OU outil pan ---
   if (e.button === 1 || App.isPanning || App.activeTool === 'pan') {
@@ -370,7 +445,7 @@ function handleMouseMove(opt) {
 
   if (!App.draw.active && App.activeTool !== 'calibrate' && App.activeTool !== 'measure') return;
 
-  const pt = fc.getPointer(e);
+  const pt = snapPoint(fc.getPointer(e), e);
 
   // Mise à jour de la preview (filigrane) selon l'outil
   switch (App.activeTool) {
@@ -474,7 +549,8 @@ function handleMouseUp(opt) {
     return;
   }
 
-  const pt = fc.getPointer(opt.e);
+  const pt = snapPoint(fc.getPointer(opt.e), opt.e);
+  showSnapMarker(null);
 
   switch (App.activeTool) {
     case 'line':   toolLine_up(pt);   break;
@@ -496,13 +572,9 @@ function handleDblClick(opt) {
 // --- Helpers communs ---
 // Crée automatiquement un calque "Annotations" si la page n'en a aucun
 function ensureActiveLayer() {
-  const pd = App.pageData[App.currentPage];
-  if (!pd) return false;                       // garde : aucun document ouvert
-  if (App.layers.length === 0) {
-    addLayer('Annotations');
-    pd.layers        = [...App.layers];
-    pd.activeLayerId = App.activeLayerId;
-  }
+  if (!App.pageData[App.currentPage]) return false;   // garde : aucun document ouvert
+  // Les calques sont globaux au document depuis la v1.4 : plus rien à recopier par page.
+  if (App.layers.length === 0) addLayer('Annotations');
   return true;
 }
 
@@ -1207,13 +1279,36 @@ function rebuildDimensionFromHandles() {
 // ÉDITION DES POLYGONES / POLYLIGNES — Poignées de sommets
 // ============================================================
 
-// Retourne les positions absolues (canvas) des sommets d'un polygone/polyligne
+// Retourne les positions absolues (page) des sommets d'un polygone/polyligne.
+// Fabric place `left` d'un polygone à minX − épaisseur/2 : le centre utilisé par
+// la matrice coïncide donc avec le centre géométrique, la conversion est directe.
 function getPolyAbsolutePoints(obj) {
   const mat = obj.calcTransformMatrix();
   return obj.points.map(p => fabric.util.transformPoint(
     { x: p.x - obj.pathOffset.x, y: p.y - obj.pathOffset.y },
     mat
   ));
+}
+
+// Positions absolues (page) des deux extrémités d'une ligne.
+// Pour une Line en revanche, `left` vaut exactement minX : le centre de la
+// matrice est décalé d'une demi-épaisseur par rapport au centre géométrique,
+// et les extrémités obtenues tombent à côté (accrochage imprécis). On neutralise
+// donc l'épaisseur le temps du calcul.
+function getLineAbsolutePoints(obj) {
+  const sw = obj.strokeWidth;
+  obj.strokeWidth = 0;
+  try {
+    const lp  = obj.calcLinePoints();
+    const mat = obj.calcTransformMatrix();
+    return [
+      fabric.util.transformPoint({ x: lp.x1, y: lp.y1 }, mat),
+      fabric.util.transformPoint({ x: lp.x2, y: lp.y2 }, mat),
+    ];
+  } finally {
+    obj.strokeWidth = sw;
+    obj.setCoords();
+  }
 }
 
 // Affiche une poignée (croix orange) sur chaque sommet
@@ -1586,8 +1681,7 @@ function resetDocumentState() {
   App.layers        = [];
   App.activeLayerId = null;
   App.nextLayerId   = 1;
-  App.history       = [];
-  App.historyIndex  = -1;
+  App.history       = {};
   App.clipboard     = null;
   App.dirty         = false;
   renderLayersList();
@@ -1727,11 +1821,7 @@ async function switchPage(pageNum) {
 
   App.currentPage = pageNum;
 
-  // Charger les calques propres à cette page
-  const pd = App.pageData[pageNum] || {};
-  App.layers        = [...(pd.layers        || [])];
-  App.activeLayerId = pd.activeLayerId || null;
-  renderLayersList();
+  // Les calques sont globaux au document : rien à recharger par page.
 
   // Mettre à jour les vignettes actives
   document.querySelectorAll('.thumb').forEach(t => {
@@ -1743,6 +1833,7 @@ async function switchPage(pageNum) {
 
   await renderCurrentPage();
   loadPageObjects();
+  updateHistoryButtons();
 }
 
 // ============================================================
@@ -1939,9 +2030,7 @@ function rotatePageObjectsOffscreen(serialized, pageH) {
 function saveCurrentPageObjects() {
   const pd = App.pageData[App.currentPage];
   if (!pd) return;                       // pas de PDF chargé → rien à sauvegarder
-  pd.objects       = serializePage(App.currentPage);
-  pd.layers        = [...App.layers];
-  pd.activeLayerId = App.activeLayerId;
+  pd.objects = serializePage(App.currentPage);
 }
 
 function loadPageObjects() {
@@ -1951,7 +2040,7 @@ function loadPageObjects() {
   // Supprimer tous les objets Fabric courants
   fc.remove(...fc.getObjects());
 
-  if (objects.length === 0) { fc.requestRenderAll(); return; }
+  if (objects.length === 0) { fc.requestRenderAll(); seedHistory(); return; }
 
   // Recréer les objets Fabric à partir du JSON sérialisé
   fabric.util.enlivenObjects(objects, (fabricObjs) => {
@@ -1961,6 +2050,7 @@ function loadPageObjects() {
     });
     applyAllLayerStates(); // Re-appliquer visibilité / verrouillage
     fc.requestRenderAll();
+    seedHistory();         // après l'hydratation : enlivenObjects est asynchrone
   });
 }
 
@@ -1975,6 +2065,7 @@ function addLayer(name) {
   App.layers.push({ id, name, visible: true, locked: false, color });
   if (!App.activeLayerId) App.activeLayerId = id;
   renderLayersList();
+  saveHistoryState();
   return id;
 }
 
@@ -1995,7 +2086,7 @@ function removeLayer(id) {
 
 function renameLayer(id, newName) {
   const layer = App.layers.find(l => l.id === id);
-  if (layer) { layer.name = newName; renderLayersList(); }
+  if (layer) { layer.name = newName; renderLayersList(); saveHistoryState(); }
 }
 
 function toggleLayerVisibility(id) {
@@ -2008,6 +2099,7 @@ function toggleLayerVisibility(id) {
   });
   App.canvas.requestRenderAll();
   renderLayersList();
+  saveHistoryState();
 }
 
 function toggleLayerLock(id) {
@@ -2022,6 +2114,7 @@ function toggleLayerLock(id) {
   App.canvas.discardActiveObject();
   App.canvas.requestRenderAll();
   renderLayersList();
+  saveHistoryState();
 }
 
 // Applique l'état de visibilité et verrouillage de tous les calques aux objets
@@ -2380,7 +2473,9 @@ function buildProjectData() {
     source:      App.pdfInfo,
     totalPages:  App.totalPages,
     nextLayerId: App.nextLayerId,
-    pages:       App.pageData, // calques inclus dans chaque pageData[pn]
+    layers:        App.layers.map(l => ({ ...l })),   // globaux au document
+    activeLayerId: App.activeLayerId,
+    pages:         App.pageData,
   };
 }
 
@@ -2471,18 +2566,11 @@ async function loadProject(jsonStr) {
       App.pageData[pn] = App.pageData[pn] || {};
       Object.assign(App.pageData[pn], data.pages[p]);
       if (!Array.isArray(App.pageData[pn].objects)) App.pageData[pn].objects = [];
-      // Compatibilité v1.0 : calques globaux migrés sur toutes les pages
-      if (!App.pageData[pn].layers && data.layers) {
-        App.pageData[pn].layers        = [...data.layers];
-        App.pageData[pn].activeLayerId = data.layers[0]?.id || null;
-      }
     });
 
-    // Recharger la page courante SANS sauvegarder le canvas (qui est vide à ce stade)
-    // et écraserait les objets qu'on vient de restaurer.
-    const pd = App.pageData[App.currentPage] || {};
-    App.layers        = [...(pd.layers        || [])];
-    App.activeLayerId = pd.activeLayerId || null;
+    // Calques globaux au document (la migration les a remontés si nécessaire)
+    App.layers        = (data.layers || []).map(l => ({ ...l }));
+    App.activeLayerId = data.activeLayerId ?? App.layers[0]?.id ?? null;
     renderLayersList();
     await renderCurrentPage();
     loadPageObjects();
@@ -2662,29 +2750,92 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
 // ============================================================
 // HISTORIQUE (UNDO)
 // ============================================================
+// ------------------------------------------------------------
+// Historique par page, avec rétablissement.
+// La v1.1 avait une pile globale pour des instantanés par page : après un
+// changement de page, annuler décrémentait l'index sans rien restaurer.
+// Il n'y avait ni instantané initial (la 1re action n'était pas annulable),
+// ni rétablissement, et le curseur d'opacité saturait la pile de 30 entrées.
+// ------------------------------------------------------------
+const HISTORY_LIMIT = 50;
+
+function pageHistory(pageNum = App.currentPage) {
+  if (!App.history[pageNum]) App.history[pageNum] = { stack: [], index: -1 };
+  return App.history[pageNum];
+}
+
+// Instantané complet : objets ET état des calques, pour que l'ajout, la
+// suppression ou le renommage d'un calque soient annulables comme le reste.
+function currentSnapshot() {
+  return JSON.stringify({
+    objects:       App.pageData[App.currentPage]?.objects || [],
+    layers:        App.layers,
+    activeLayerId: App.activeLayerId,
+  });
+}
+
 function saveHistoryState() {
-  if (!App.pageData[App.currentPage]) return;
+  if (!App.pageData[App.currentPage] || App._restoringHistory) return;
   saveCurrentPageObjects();
   markDirty();
-  const snapshot = JSON.stringify({
-    page:    App.currentPage,
-    objects: App.pageData[App.currentPage].objects,
-  });
-  // Tronquer l'historique si on est au milieu
-  App.history = App.history.slice(0, App.historyIndex + 1);
-  App.history.push(snapshot);
-  if (App.history.length > 30) App.history.shift();
-  App.historyIndex = App.history.length - 1;
+
+  const h    = pageHistory();
+  const snap = currentSnapshot();
+  if (h.stack[h.index] === snap) return;         // rien n'a changé
+
+  h.stack.length = h.index + 1;                  // tronquer la branche annulée
+  h.stack.push(snap);
+  if (h.stack.length > HISTORY_LIMIT) h.stack.shift();
+  h.index = h.stack.length - 1;
+  updateHistoryButtons();
+}
+
+// Instantané de départ, posé à l'ouverture d'une page : sans lui la première
+// action de la page ne pouvait pas être annulée.
+function seedHistory() {
+  const h = pageHistory();
+  if (h.stack.length) return;
+  h.stack = [currentSnapshot()];
+  h.index = 0;
+  updateHistoryButtons();
+}
+
+function applySnapshot(json) {
+  const snap = JSON.parse(json);
+  App._restoringHistory = true;
+  try {
+    App.pageData[App.currentPage].objects = snap.objects;
+    App.layers        = (snap.layers || []).map(l => ({ ...l }));
+    App.activeLayerId = snap.activeLayerId ?? App.layers[0]?.id ?? null;
+    renderLayersList();
+    loadPageObjects();
+  } finally {
+    App._restoringHistory = false;
+  }
+  markDirty();
+  updateHistoryButtons();
 }
 
 function undo() {
-  if (App.historyIndex <= 0) { showToast('Rien à annuler'); return; }
-  App.historyIndex--;
-  const snap = JSON.parse(App.history[App.historyIndex]);
-  if (snap.page === App.currentPage) {
-    App.pageData[App.currentPage].objects = snap.objects;
-    loadPageObjects();
-  }
+  const h = pageHistory();
+  if (h.index <= 0) { showToast('Rien à annuler sur cette page'); return; }
+  h.index--;
+  applySnapshot(h.stack[h.index]);
+}
+
+function redo() {
+  const h = pageHistory();
+  if (h.index >= h.stack.length - 1) { showToast('Rien à rétablir'); return; }
+  h.index++;
+  applySnapshot(h.stack[h.index]);
+}
+
+function updateHistoryButtons() {
+  const h = App.history[App.currentPage] || { stack: [], index: -1 };
+  const u = document.getElementById('btn-undo');
+  const r = document.getElementById('btn-redo');
+  if (u) u.disabled = h.index <= 0;
+  if (r) r.disabled = h.index >= h.stack.length - 1;
 }
 
 // ============================================================
@@ -2696,6 +2847,8 @@ function resetDrawState() {
   cleanupDimPreview();
   removeDimHandles();
   removePolyHandles();
+  snapMarker = null;
+  invalidateSnapCache();
   // Supprimer tous les objets temporaires restants (previews, segments intermédiaires,
   // marqueurs). Balisés par data.temp : les calques verrouillés ne sont plus touchés.
   removeTempObjects();
@@ -2824,6 +2977,10 @@ function initToolbar() {
 
   // Undo / Supprimer
   document.getElementById('btn-undo')  .addEventListener('click', undo);
+  document.getElementById('btn-redo')  .addEventListener('click', redo);
+  document.getElementById('btn-front')?.addEventListener('click', () => changeZOrder('front'));
+  document.getElementById('btn-back') ?.addEventListener('click', () => changeZOrder('back'));
+  document.getElementById('btn-help') ?.addEventListener('click', openHelp);
   document.getElementById('btn-delete').addEventListener('click', deleteSelected);
 
   // Champs L/H dans le header — Entrée ou blur pour appliquer
@@ -2950,6 +3107,103 @@ function updateZoomDisplay() {
   document.getElementById('zoom-display').textContent = `${Math.round(z * 100)}%`;
 }
 
+// ============================================================
+// ORDRE D'EMPILEMENT (v1.4)
+// ============================================================
+function changeZOrder(action) {
+  const fc   = App.canvas;
+  const objs = fc.getActiveObjects().filter(o => !isTempObject(o));
+  if (!objs.length) { showToast('Sélectionnez d’abord un objet'); return; }
+  // L'image de fond n'est pas dans getObjects() : elle reste toujours derrière.
+  objs.forEach(o => {
+    if      (action === 'front')    fc.bringToFront(o);
+    else if (action === 'back')     fc.sendToBack(o);
+    else if (action === 'forward')  fc.bringForward(o);
+    else if (action === 'backward') fc.sendBackwards(o);
+  });
+  fc.requestRenderAll();
+  saveHistoryState();
+}
+
+// ============================================================
+// AIDE — RACCOURCIS CLAVIER
+// ------------------------------------------------------------
+// La liste est construite à partir de TOOL_SHORTCUTS, la table réellement
+// utilisée par le gestionnaire clavier : impossible qu'elle dérive de
+// l'implémentation (l'infobulle annonçait « Espace » pour un raccourci « H »).
+// ============================================================
+const TOOL_SHORTCUTS = {
+  v: 'select', h: 'pan', l: 'line', p: 'polyline', g: 'polygon', r: 'rect',
+  c: 'circle', f: 'freedraw', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate',
+};
+
+const TOOL_LABELS = {
+  select: 'Sélection', pan: 'Déplacer la vue', line: 'Ligne', polyline: 'Polyligne',
+  polygon: 'Polygone', rect: 'Rectangle', circle: 'Cercle / ellipse',
+  freedraw: 'Dessin libre', cloud: 'Nuage de révision', text: 'Texte',
+  measure: 'Cote / mesure', calibrate: 'Calibrer la page',
+};
+
+const OTHER_SHORTCUTS = [
+  ['Édition', [
+    ['Ctrl + Z',        'Annuler'],
+    ['Ctrl + Maj + Z / Ctrl + Y', 'Rétablir'],
+    ['Ctrl + C / X / V', 'Copier / couper / coller'],
+    ['Ctrl + D',        'Dupliquer'],
+    ['Ctrl + A',        'Tout sélectionner'],
+    ['Suppr',           'Supprimer la sélection'],
+    ['Échap',           'Annuler le tracé en cours / fermer une fenêtre'],
+  ]],
+  ['Empilement', [
+    ['Ctrl + ⇧ Début',  'Mettre au premier plan'],
+    ['Ctrl + ⇧ Fin',    'Mettre à l’arrière-plan'],
+    ['Ctrl + ]',        'Avancer d’un rang'],
+    ['Ctrl + [',        'Reculer d’un rang'],
+  ]],
+  ['Navigation et vue', [
+    ['Page ↑ / Page ↓', 'Page précédente / suivante'],
+    ['0',               'Ajuster à la fenêtre'],
+    ['1',               'Taille réelle (100 %)'],
+    ['Molette',         'Zoomer'],
+    ['Espace (maintenu)', 'Déplacer la vue'],
+    ['Clic molette',    'Déplacer la vue'],
+  ]],
+  ['Tracé', [
+    ['Maj (maintenu)',  'Contraindre l’angle à 45°'],
+    ['Double-clic',     'Terminer une polyligne / fermer un polygone'],
+  ]],
+];
+
+function buildShortcutsHelp() {
+  const body = document.getElementById('help-body');
+  if (!body || body.dataset.built) return;
+  body.dataset.built = '1';
+
+  const section = (title, rows) => {
+    const h = document.createElement('div');
+    h.className = 'help-section';
+    h.innerHTML = `<h3>${title}</h3>`;
+    const dl = document.createElement('dl');
+    rows.forEach(([k, d]) => {
+      const dt = document.createElement('dt'); dt.textContent = k;
+      const dd = document.createElement('dd'); dd.textContent = d;
+      dl.append(dt, dd);
+    });
+    h.appendChild(dl);
+    return h;
+  };
+
+  const outils = Object.entries(TOOL_SHORTCUTS)
+    .map(([key, tool]) => [key.toUpperCase(), TOOL_LABELS[tool] || tool]);
+  body.appendChild(section('Outils', outils));
+  OTHER_SHORTCUTS.forEach(([t, rows]) => body.appendChild(section(t, rows)));
+}
+
+function openHelp() {
+  buildShortcutsHelp();
+  openModal('modal-help');
+}
+
 function deleteSelected() {
   const fc  = App.canvas;
   const sel = fc.getActiveObjects();
@@ -3034,21 +3288,36 @@ function initSidebar() {
   });
 
   // Contrôles de style
-  document.getElementById('prop-stroke-color').addEventListener('input', (e) => {
-    App.toolProps.strokeColor = e.target.value;
-    applyToSelection({ stroke: e.target.value });
-    if (App.activeTool === 'freedraw') App.canvas.freeDrawingBrush.color = e.target.value;
+  // Les contrôles continus (couleurs, opacité) appliquent en direct sur `input`
+  // mais n'enregistrent dans l'historique que sur `change` : en v1.1 un seul
+  // glissement du curseur d'opacité saturait la pile et détruisait l'historique.
+  bindStyleControl('prop-stroke-color', 'input', (v) => {
+    App.toolProps.strokeColor = v;
+    applyToSelection({ stroke: v }, false);
+    if (App.activeTool === 'freedraw') App.canvas.freeDrawingBrush.color = v;
   });
+  bindStyleControl('prop-fill-color', 'input', (v) => {
+    App.toolProps.fillColor = v;
+    if (document.getElementById('prop-fill-mode').value === 'solid')
+      applyToSelection({ fill: v }, false);
+  });
+  bindStyleControl('prop-text-color', 'input', (v) => {
+    App.toolProps.fontColor = v;
+    applyToSelection({ fill: v }, false);
+  });
+  bindStyleControl('prop-opacity', 'input', (v) => {
+    const op = parseInt(v, 10) / 100;
+    App.toolProps.opacity = op;
+    document.getElementById('prop-opacity-val').textContent = v;
+    applyToSelection({ opacity: op }, false);
+  });
+
   document.getElementById('prop-stroke-width').addEventListener('change', (e) => {
-    const w = parseFloat(e.target.value) || 2;
+    const w = Math.max(0.1, parseFloat(e.target.value) || 2);
+    e.target.value = w;
     App.toolProps.strokeWidth = w;
     applyToSelection({ strokeWidth: w });
     if (App.activeTool === 'freedraw') App.canvas.freeDrawingBrush.width = w;
-  });
-  document.getElementById('prop-fill-color').addEventListener('input', (e) => {
-    App.toolProps.fillColor = e.target.value;
-    if (document.getElementById('prop-fill-mode').value === 'solid')
-      applyToSelection({ fill: e.target.value });
   });
   document.getElementById('prop-fill-mode').addEventListener('change', (e) => {
     const fill = e.target.value === 'transparent' ? 'transparent' : document.getElementById('prop-fill-color').value;
@@ -3060,18 +3329,9 @@ function initSidebar() {
     App.toolProps.dashArray = map[e.target.value];
     applyToSelection({ strokeDashArray: map[e.target.value] });
   });
-  document.getElementById('prop-opacity').addEventListener('input', (e) => {
-    const op = parseInt(e.target.value) / 100;
-    App.toolProps.opacity = op;
-    document.getElementById('prop-opacity-val').textContent = e.target.value;
-    applyToSelection({ opacity: op });
-  });
-  document.getElementById('prop-text-color').addEventListener('input', (e) => {
-    App.toolProps.fontColor = e.target.value;
-    applyToSelection({ fill: e.target.value });
-  });
   document.getElementById('prop-font-size').addEventListener('change', (e) => {
-    App.toolProps.fontSize = parseInt(e.target.value) || 16;
+    App.toolProps.fontSize = Math.max(1, parseInt(e.target.value, 10) || 16);
+    e.target.value = App.toolProps.fontSize;
     applyToSelection({ fontSize: App.toolProps.fontSize });
   });
 
@@ -3099,7 +3359,10 @@ function initSidebar() {
   });
 }
 
-function applyToSelection(props) {
+// Applique un jeu de propriétés à la sélection.
+// `history = false` pour les contrôles continus : l'enregistrement se fait
+// alors une seule fois, au relâchement (événement `change`).
+function applyToSelection(props, history = true) {
   const fc  = App.canvas;
   const sel = fc.getActiveObjects();
   if (!sel.length) return;
@@ -3109,7 +3372,16 @@ function applyToSelection(props) {
     obj.setCoords();
   });
   fc.requestRenderAll();
-  saveHistoryState();
+  if (history) saveHistoryState();
+}
+
+// Associe un contrôle continu : application immédiate sur `input`,
+// enregistrement dans l'historique une seule fois sur `change`.
+function bindStyleControl(id, liveEvent, apply) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener(liveEvent, (e) => apply(e.target.value));
+  el.addEventListener('change', (e) => { apply(e.target.value); saveHistoryState(); });
 }
 
 // ============================================================
@@ -3192,6 +3464,9 @@ function initModals() {
     if (name) renameLayer(id, name);
     closeModal(document.getElementById('modal-rename-layer'));
   });
+  document.getElementById('help-close')?.addEventListener('click', () =>
+    closeModal(document.getElementById('modal-help')));
+
   document.getElementById('rename-layer-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('rename-layer-confirm').click();
   });
@@ -3234,14 +3509,7 @@ function openExportModal() {
   if (!requireDocument()) return;
   saveCurrentPageObjects();
 
-  // Collecter tous les calques de toutes les pages (IDs uniques)
-  const seen = new Set();
-  const allLayers = [];
-  for (let pn = 1; pn <= App.totalPages; pn++) {
-    (App.pageData[pn]?.layers || []).forEach(l => {
-      if (!seen.has(l.id)) { seen.add(l.id); allLayers.push({ ...l, page: pn }); }
-    });
-  }
+  const allLayers = App.layers;      // calques globaux au document
 
   const list = document.getElementById('export-layers-list');
   list.innerHTML = '';
@@ -3259,7 +3527,7 @@ function openExportModal() {
       cb.checked = layer.visible;
       const dot  = document.createElement('span');
       dot.style.cssText = `display:inline-block;width:10px;height:10px;border-radius:50%;background:${layer.color};flex-shrink:0`;
-      const txt  = document.createTextNode(`${layer.name} (p.${layer.page})`);
+      const txt  = document.createTextNode(layer.name);
       label.append(cb, dot, txt);
       item.appendChild(label);
       list.appendChild(item);
@@ -3286,7 +3554,12 @@ function initKeyboardShortcuts() {
 
     const isCtrl = e.ctrlKey || e.metaKey;
 
-    if (isCtrl && e.key === 'z') { e.preventDefault(); undo(); return; }
+    if (isCtrl && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      e.shiftKey ? redo() : undo();                 // Ctrl+Maj+Z = rétablir
+      return;
+    }
+    if (isCtrl && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
     if (isCtrl && e.key === 'c') { e.preventDefault(); copySelected(); return; }
     if (isCtrl && e.key === 'x') { e.preventDefault(); cutSelected(); return; }
     if (isCtrl && e.key === 'v') { e.preventDefault(); pasteClipboard(); return; }
@@ -3309,6 +3582,15 @@ function initKeyboardShortcuts() {
     }
     if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelected(); return; }
 
+    // Ordre d'empilement
+    if (isCtrl && e.key === ']')    { e.preventDefault(); changeZOrder(e.shiftKey ? 'front' : 'forward');  return; }
+    if (isCtrl && e.key === '[')    { e.preventDefault(); changeZOrder(e.shiftKey ? 'back'  : 'backward'); return; }
+    if (isCtrl && e.key === 'Home') { e.preventDefault(); changeZOrder('front'); return; }
+    if (isCtrl && e.key === 'End')  { e.preventDefault(); changeZOrder('back');  return; }
+
+    // Aide
+    if (e.key === '?' || e.key === 'F1') { e.preventDefault(); openHelp(); return; }
+
     // Espace = toggle pan
     if (e.key === ' ') {
       e.preventDefault();
@@ -3324,8 +3606,7 @@ function initKeyboardShortcuts() {
     if (e.key === '0') { e.preventDefault(); fitToWindow();      return; }
     if (e.key === '1') { e.preventDefault(); zoomToActualSize(); return; }
 
-    const shortcuts = { v: 'select', h: 'pan', l: 'line', p: 'polyline', g: 'polygon', r: 'rect', c: 'circle', f: 'freedraw', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate' };
-    if (!isCtrl && shortcuts[e.key]) setActiveTool(shortcuts[e.key]);
+    if (!isCtrl && TOOL_SHORTCUTS[e.key]) setActiveTool(TOOL_SHORTCUTS[e.key]);
   });
 
   document.addEventListener('keyup', (e) => {
