@@ -107,10 +107,20 @@ function liftLayersToDocument(data) {
   const seen   = new Map();
   let activeLayerId = null;
 
-  Object.values(data.pages || {}).forEach(page => {
+  // Les calques par page portaient souvent le même nom (« Annotations » créé
+  // automatiquement sur chaque page) : une fois regroupés ils deviendraient
+  // indiscernables dans le panneau. On suffixe donc par la page d'origine.
+  const usedNames = new Set();
+
+  Object.keys(data.pages || {}).forEach(pageKey => {
+    const page = data.pages[pageKey] || {};
     (page.layers || []).forEach(l => {
-      if (l == null || l.id == null) return;
-      if (!seen.has(l.id)) { seen.set(l.id, { ...l }); layers.push(seen.get(l.id)); }
+      if (l == null || l.id == null || seen.has(l.id)) return;
+      const copy = { ...l };
+      if (copy.name && usedNames.has(copy.name)) copy.name = `${copy.name} (p.${pageKey})`;
+      usedNames.add(copy.name);
+      seen.set(l.id, copy);
+      layers.push(copy);
     });
     if (activeLayerId == null && page.activeLayerId != null) activeLayerId = page.activeLayerId;
   });

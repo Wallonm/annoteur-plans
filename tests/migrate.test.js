@@ -237,10 +237,27 @@ test('projet réel : les calques remontent au document sans doublon', { skip: !f
   const maxId = Math.max(...data.layers.map(l => l.id));
   assert.ok(data.nextLayerId > maxId, 'nextLayerId au-dessus du plus grand identifiant');
 
+  // Les calques homonymes créés page par page doivent rester distinguables
+  const noms = data.layers.map(l => l.name);
+  assert.equal(new Set(noms).size, noms.length, `noms de calque en double : ${noms.join(', ')}`);
+
   // Tous les objets référencent un calque existant
   const connus = new Set(data.layers.map(l => l.id));
   Object.values(data.pages).forEach(p => (p.objects || []).forEach(o => {
     if (o.data?.layerId != null) assert.ok(connus.has(o.data.layerId),
       `calque ${o.data.layerId} référencé mais absent`);
   }));
+});
+
+test('liftLayersToDocument : les homonymes sont suffixés par leur page d’origine', () => {
+  const { data } = liftLayersToDocument({
+    pages: {
+      1: { layers: [{ id: 1, name: 'Annotations' }] },
+      3: { layers: [{ id: 2, name: 'Annotations' }] },
+      4: { layers: [{ id: 3, name: 'Annotations' }, { id: 4, name: 'Réseaux' }] },
+    },
+  });
+  assert.deepEqual(data.layers.map(l => l.name),
+                   ['Annotations', 'Annotations (p.3)', 'Annotations (p.4)', 'Réseaux']);
+  assert.deepEqual(data.layers.map(l => l.id), [1, 2, 3, 4], 'les identifiants sont intacts');
 });

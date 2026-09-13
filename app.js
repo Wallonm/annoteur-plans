@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.4.0';   // Lot 3 — Confort
+const APP_VERSION  = '1.4.1';   // Lot 3 — Confort
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -2093,10 +2093,16 @@ function toggleLayerVisibility(id) {
   const layer = App.layers.find(l => l.id === id);
   if (!layer) return;
   layer.visible = !layer.visible;
-  // Appliquer sur les objets du canvas courant
+  // Un objet masqué ne doit pas rester sélectionnable : en v1.1 Ctrl+A
+  // l'attrapait et il pouvait être déplacé ou supprimé sans être vu.
   App.canvas.getObjects().forEach(obj => {
-    if (obj.data?.layerId === id) obj.set('visible', layer.visible);
+    if (obj.data?.layerId === id) {
+      obj.set({ visible:    layer.visible,
+                selectable: layer.visible && !layer.locked,
+                evented:    layer.visible && !layer.locked });
+    }
   });
+  App.canvas.discardActiveObject();
   App.canvas.requestRenderAll();
   renderLayersList();
   saveHistoryState();
@@ -2108,7 +2114,8 @@ function toggleLayerLock(id) {
   layer.locked = !layer.locked;
   App.canvas.getObjects().forEach(obj => {
     if (obj.data?.layerId === id) {
-      obj.set({ selectable: !layer.locked, evented: !layer.locked });
+      obj.set({ selectable: layer.visible && !layer.locked,
+                evented:    layer.visible && !layer.locked });
     }
   });
   App.canvas.discardActiveObject();
@@ -3362,6 +3369,23 @@ function initSidebar() {
 // Applique un jeu de propriétés à la sélection.
 // `history = false` pour les contrôles continus : l'enregistrement se fait
 // alors une seule fois, au relâchement (événement `change`).
+// Remet le panneau Style en accord avec les réglages d'outil courants
+function syncPropsPanelFromTool() {
+  const tp = App.toolProps;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('prop-stroke-color', rgbToHex(tp.strokeColor) || '#e53e3e');
+  set('prop-stroke-width', tp.strokeWidth);
+  set('prop-font-size',    tp.fontSize);
+  set('prop-text-color',   rgbToHex(tp.fontColor) || '#000000');
+  set('prop-opacity',      Math.round(tp.opacity * 100));
+  const val = document.getElementById('prop-opacity-val');
+  if (val) val.textContent = Math.round(tp.opacity * 100);
+  set('prop-fill-mode', isTransparentFill(tp.fillColor) ? 'transparent' : 'solid');
+  if (!isTransparentFill(tp.fillColor)) set('prop-fill-color', rgbToHex(tp.fillColor) || '#ff0000');
+  const dash = tp.dashArray;
+  set('prop-dash', !dash ? 'solid' : (dash[0] === 2 ? 'dotted' : 'dashed'));
+}
+
 function applyToSelection(props, history = true) {
   const fc  = App.canvas;
   const sel = fc.getActiveObjects();
