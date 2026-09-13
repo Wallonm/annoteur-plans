@@ -2,12 +2,12 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.4.1';   // Lot 3 — Confort
+const APP_VERSION  = '1.5.0';   // Lot 4 — Export vectoriel, hors ligne, accessibilité
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// Worker servi localement : aucune dépendance réseau à l'exécution.
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
 
 // ============================================================
 // ÉTAT GLOBAL
@@ -102,6 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initSymbolLibrary();
   initKeyboardShortcuts();
   initAutosave();
+  initAccessibility();
+  initTouch();
   updateCalibrationUI();
   updateDocumentState();
 
@@ -1611,9 +1613,12 @@ async function loadPDF(file) {
     App.currentPage = 1;
     App.pdfInfo    = { fileName: file.name, byteSize: file.size, pageCount: App.totalPages };
 
+    // La rotation est ABSOLUE et part du /Rotate du PDF : getViewport({rotation})
+    // l'écrase, or un plan scanné stocké en /Rotate 90 s'affichait de travers.
     for (let i = 1; i <= App.totalPages; i++) {
+      const pg = await App.pdfDoc.getPage(i);
       App.pageData[i] = {
-        rotation:    0,
+        rotation:    ((pg.rotate || 0) % 360 + 360) % 360,
         calibration: null,   // { pointsPerUnit, unit }
         objects:     [],     // objets Fabric sérialisés, en points PDF
       };
@@ -2607,8 +2612,45 @@ const PAPER_FORMATS = {
   a3: { w: 297, h: 420 },
 };
 
-async function exportPDF(selectedLayerIds, resolution, format = 'original') {
+// Aiguillage : vectoriel (défaut) ou rastérisé (compatibilité)
+async function exportPDF(selectedLayerIds, resolution, format = 'original', mode = 'vector') {
   if (!requireDocument()) return;
+  if (mode === 'vector') return exportPDFVectorial(selectedLayerIds);
+  return exportPDFRaster(selectedLayerIds, resolution, format);
+}
+
+// Export vectoriel : annotations ajoutées au PDF d'origine, qui conserve
+// son vectoriel, son texte recherchable et sa taille de fichier.
+const VECTOR_MAX_BYTES = 200 * 1024 * 1024;
+
+async function exportPDFVectorial(selectedLayerIds) {
+  if (!App.pdfBlob) {
+    showError('Le PDF d’origine n’est plus disponible : utilisez l’export rastérisé.');
+    return;
+  }
+  if (App.pdfBlob.size > VECTOR_MAX_BYTES) {
+    showError('PDF trop volumineux pour l’export vectoriel — choisissez « Rastérisé ».');
+    return;
+  }
+
+  setProgress('Export vectoriel : préparation…');
+  saveCurrentPageObjects();
+  try {
+    const bytes = await exportPdfVector(selectedLayerIds, (pn, total) =>
+      setProgress(`Export vectoriel : page ${pn} / ${total}…`));
+    const base = (App.pdfInfo?.fileName || 'plan').replace(/\.pdf$/i, '');
+    downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${base}-annote.pdf`);
+    showToast('Export vectoriel terminé ✓');
+  } catch (err) {
+    console.error(err);
+    showError(`Export vectoriel impossible : ${describeError(err)}. ` +
+              `Réessayez en mode « Rastérisé ».`);
+  } finally {
+    clearProgress();
+  }
+}
+
+async function exportPDFRaster(selectedLayerIds, resolution, format = 'original') {
   setProgress('Export : préparation…');
 
   const { jsPDF } = window.jspdf;
@@ -3012,7 +3054,9 @@ function setActiveTool(toolName) {
 
   // Mettre à jour les boutons
   document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
-    b.classList.toggle('active', b.dataset.tool === toolName);
+    const on = b.dataset.tool === toolName;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
   });
 
   // Configurer le canvas
@@ -3284,15 +3328,27 @@ function updatePropsFromSelection() {
 // ============================================================
 function initSidebar() {
   // Onglets
-  document.querySelectorAll('.sidebar-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      const panel = document.getElementById(`panel-${tab.dataset.panel}`);
-      if (panel) panel.classList.add('active');
+  const tabs = [...document.querySelectorAll('.sidebar-tab')];
+  const selectTab = (tab) => {
+    tabs.forEach(t => {
+      const on = t === tab;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(`panel-${t.dataset.panel}`)?.classList.toggle('active', on);
+    });
+  };
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => selectTab(tab));
+    // Navigation clavier conforme au motif ARIA « tablist »
+    tab.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      selectTab(next); next.focus();
     });
   });
+  selectTab(tabs[0]);
 
   // Contrôles de style
   // Les contrôles continus (couleurs, opacité) appliquent en direct sur `input`
@@ -3461,6 +3517,14 @@ function initModals() {
   });
 
   // --- Modal export ---
+  document.getElementById('export-mode')?.addEventListener('change', (e) => {
+    const raster = e.target.value === 'raster';
+    document.getElementById('raster-options').style.display = raster ? '' : 'none';
+    document.getElementById('export-hint').textContent = raster
+      ? "Le mode rastérisé aplatit le plan en image : compatible partout, mais le texte du plan n'est plus sélectionnable et le fichier est nettement plus lourd."
+      : "Le mode vectoriel ajoute les annotations au PDF d'origine : le plan garde sa qualité, son texte reste sélectionnable et le fichier reste léger.";
+  });
+
   document.getElementById('export-cancel').addEventListener('click', () => {
     closeModal(document.getElementById('modal-export'));
   });
@@ -3469,13 +3533,14 @@ function initModals() {
     const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
     const resolution  = document.getElementById('export-resolution').value;
     const format      = document.getElementById('export-format').value;
+    const mode        = document.getElementById('export-mode').value;
     const total       = document.querySelectorAll('#export-layers-list input[type=checkbox]').length;
     if (total > 0 && selectedIds.length === 0 &&
         !confirm('Aucun calque sélectionné : le PDF exporté ne contiendra aucune annotation.\n\nContinuer ?')) {
       return;
     }
     closeModal(document.getElementById('modal-export'));
-    exportPDF(selectedIds, resolution, format);
+    exportPDF(selectedIds, resolution, format, mode);
   });
 
   // --- Modal renommer calque ---
@@ -3808,6 +3873,56 @@ function updateDocumentState() {
 
   document.body.classList.toggle('no-document', !hasDoc);
   document.querySelectorAll('[data-needs-doc]').forEach(el => { el.disabled = !hasDoc; });
+}
+
+// ============================================================
+// ACCESSIBILITÉ
+// ------------------------------------------------------------
+// Les boutons n'ont qu'un emoji comme contenu : sans libellé ils sont
+// annoncés « bouton » par un lecteur d'écran. On dérive le libellé de
+// l'infobulle, déjà rédigée et traduite.
+// ============================================================
+function initAccessibility() {
+  document.querySelectorAll('button[title]').forEach(b => {
+    if (!b.getAttribute('aria-label')) b.setAttribute('aria-label', b.title);
+  });
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.classList.contains('active')));
+  });
+
+  // Bascules des panneaux sur petit écran
+  document.getElementById('btn-toggle-tools')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.body.classList.toggle('tools-open');
+    document.body.classList.remove('panel-open');
+  });
+  document.getElementById('btn-toggle-sidebar')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.body.classList.toggle('panel-open');
+    document.body.classList.remove('tools-open');
+  });
+  document.getElementById('canvas-wrapper')?.addEventListener('pointerdown', () => {
+    document.body.classList.remove('tools-open', 'panel-open');
+  });
+}
+
+// ============================================================
+// TACTILE — pincer pour zoomer
+// ------------------------------------------------------------
+// Fabric émet `touch:gesture` ; inutile de recoder la détection.
+// ============================================================
+function initTouch() {
+  let startZoom = 1;
+  App.canvas.on('touch:gesture', (opt) => {
+    const e = opt.e;
+    if (!e.touches || e.touches.length !== 2) return;
+    e.preventDefault();
+    if (opt.self.state === 'start') startZoom = App.canvas.getZoom();
+    const z = Math.max(0.05, Math.min(20, startZoom * opt.self.scale));
+    App.canvas.zoomToPoint({ x: opt.self.x, y: opt.self.y }, z);
+    updateZoomDisplay();
+    if (opt.self.state === 'end') scheduleBackgroundRefresh();
+  });
 }
 
 // ============================================================

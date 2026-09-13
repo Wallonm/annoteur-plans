@@ -1,5 +1,54 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.5.0 — Lot 4 : Export vectoriel, hors ligne, accessibilité
+
+### Ajouté — export vectoriel (mode par défaut)
+
+- **Les annotations sont ajoutées au PDF d'origine sous forme de tracés vectoriels et de
+  texte réel** (pdf-lib), au lieu de tout rastériser en JPEG. Le plan conserve sa qualité,
+  son texte reste sélectionnable, et les annotations aussi.
+  Mesuré sur `plan_redresse_v4.pdf` : **14,65 Mo en 1 s** (source 14,63 Mo, soit 20 Ko
+  d'annotations) et les 30 textes d'annotation de la page 4 ressortent en texte
+  extractible. L'export rastérisé produisait 10,6 Mo d'images aplaties et dégradées.
+- Toutes les formes sont converties : lignes, rectangles, ellipses (quatre cubiques),
+  polygones, tracés libres, nuages de révision et symboles (les arcs sont réduits en
+  cubiques), groupes (cotes, symboles) par récursion, avec opacité, tirets et
+  épaisseurs conservés.
+- Le texte est positionné à partir des métriques réelles de Fabric plutôt que de
+  constantes recopiées. Les caractères non représentables en Helvetica standard sont
+  remplacés au lieu de faire échouer l'export.
+- **Le mode rastérisé reste disponible** dans la fenêtre d'export, sous « Compatibilité ».
+
+### Corrigé
+
+- **La rotation propre au PDF (`/Rotate`) est prise en compte.** Elle était écrasée par
+  `getViewport({rotation})` : un plan scanné enregistré en `/Rotate 90` s'affichait de
+  travers. La rotation est désormais absolue, initialisée depuis le document, et
+  réappliquée telle quelle à l'export.
+
+### Ajouté — fonctionnement hors ligne
+
+- **Les quatre bibliothèques sont servies localement** (`vendor/`, ~2,5 Mo) : pdf.js,
+  Fabric, jsPDF et pdf-lib, worker pdf.js compris. L'application ne dépend plus d'un
+  CDN — indispensable sur chantier. Les contrôles d'intégrité SRI n'ont plus d'objet
+  pour des fichiers de même origine et ont donc été retirés.
+
+### Ajouté — accessibilité
+
+- Onglets latéraux en véritables `role="tab"` avec navigation aux flèches ← →.
+- Libellés `aria-label` sur tous les boutons (leur contenu n'était qu'un emoji),
+  `aria-pressed` sur l'outil actif.
+- Fenêtres modales `role="dialog" aria-modal="true"` avec titre associé.
+- Contour de focus visible au clavier (`:focus-visible`).
+- Contraste du texte secondaire porté de ≈4,1:1 à ≈6,7:1 (seuil AA atteint).
+
+### Ajouté — tablette et petits écrans
+
+- Sous 900 px, les deux panneaux latéraux se replient derrière des boutons et
+  s'ouvrent en superposition ; ils se referment au premier appui sur le plan.
+- Cibles tactiles portées à 44 px sur écran tactile, vignettes agrandies.
+- **Pincer pour zoomer**, via les gestes déjà fournis par Fabric.
+
 ## v1.4.0 — Lot 3 : Confort
 
 ### Changé — historique

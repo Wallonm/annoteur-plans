@@ -16,7 +16,7 @@
       --accent-hover: #9d8fff;
       --danger: #e05c5c;
       --text: #e0e0f0;
-      --text-dim: #9090a8;
+      --text-dim: #a8a8c0;   /* contraste AA sur --panel (≈6,7:1) */
       --canvas-bg: #404055;
       --tool-active: #7c6ff7;
     }
@@ -352,6 +352,52 @@
     .help-section dd { font-size: 12px; color: var(--text-dim); }
     #btn-help { font-weight: 700; }
 
+    /* ===== v1.5 — ACCESSIBILITÉ ===== */
+    :focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+    }
+    .sidebar-tab {
+      background: none; border: none; font-family: inherit;
+    }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+    .tool-btn[aria-pressed="true"] { background: var(--tool-active); color: #fff; }
+
+    /* ===== v1.5 — TACTILE ET PETITS ÉCRANS ===== */
+    #canvas-wrapper { touch-action: none; }   /* le pincer-zoomer est géré par l'app */
+
+    #btn-toggle-tools, #btn-toggle-sidebar { display: none; }
+
+    @media (pointer: coarse) {
+      .tool-btn { width: 44px; height: 44px; }
+      #tool-sidebar { width: 54px; }
+      .h-btn { padding: 9px 12px; }
+      .layer-btn { padding: 6px; font-size: 15px; }
+      .thumb { width: 74px; height: 92px; }
+    }
+
+    @media (max-width: 900px) {
+      #btn-toggle-tools, #btn-toggle-sidebar { display: flex; }
+      #header { min-height: 42px; padding: 4px 8px; gap: 5px; }
+      #header h1 span, #doc-state { display: none; }
+      #tool-sidebar {
+        position: absolute; left: 0; top: 0; bottom: 0; z-index: 400;
+        transform: translateX(-100%); transition: transform .2s;
+        box-shadow: 4px 0 16px rgba(0,0,0,.4);
+      }
+      #right-sidebar {
+        position: absolute; right: 0; top: 0; bottom: 0; z-index: 400; width: 260px;
+        transform: translateX(100%); transition: transform .2s;
+        box-shadow: -4px 0 16px rgba(0,0,0,.4);
+      }
+      body.tools-open  #tool-sidebar  { transform: translateX(0); }
+      body.panel-open  #right-sidebar { transform: translateX(0); }
+      #main { position: relative; }
+      #thumbnails { height: 74px; }
+    }
+
     /* Scrollbar globale */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -370,6 +416,7 @@
 </div>
 
 <header id="header">
+  <button class="h-btn" id="btn-toggle-tools" aria-label="Afficher les outils" title="Outils">☰</button>
   <h1>📐 Annoteur Plans <span id="app-version"></span></h1>
   <div class="h-sep"></div>
   <button class="h-btn" id="btn-open-pdf" title="Importer un PDF">📂 Ouvrir PDF</button>
@@ -403,6 +450,7 @@
   <span id="page-info">— / —</span>
   <div class="spacer"></div>
   <button class="h-btn primary" id="btn-export" data-needs-doc title="Exporter en PDF">⬇️ Exporter PDF</button>
+  <button class="h-btn" id="btn-toggle-sidebar" aria-label="Afficher les calques et le style" title="Panneaux">▤</button>
 </header>
 
 <!-- ===== MAIN ===== -->
@@ -465,14 +513,14 @@
 
   <!-- Sidebar droite : calques / propriétés / symboles -->
   <div id="right-sidebar">
-    <div class="sidebar-tabs">
-      <div class="sidebar-tab active" data-panel="layers">Calques</div>
-      <div class="sidebar-tab" data-panel="props">Style</div>
-      <div class="sidebar-tab" data-panel="symbols">Symboles</div>
+    <div class="sidebar-tabs" role="tablist" aria-label="Panneaux latéraux">
+      <button class="sidebar-tab active" role="tab" aria-selected="true"  aria-controls="panel-layers"  id="tab-layers"  data-panel="layers">Calques</button>
+      <button class="sidebar-tab"        role="tab" aria-selected="false" aria-controls="panel-props"   id="tab-props"   data-panel="props">Style</button>
+      <button class="sidebar-tab"        role="tab" aria-selected="false" aria-controls="panel-symbols" id="tab-symbols" data-panel="symbols">Symboles</button>
     </div>
 
     <!-- Panneau Calques -->
-    <div id="panel-layers" class="sidebar-panel active">
+    <div id="panel-layers" class="sidebar-panel active" role="tabpanel" aria-labelledby="tab-layers">
       <div class="panel-header">
         <span class="panel-title">Calques</span>
         <button class="icon-btn" id="btn-add-layer" title="Nouveau calque">+</button>
@@ -481,7 +529,7 @@
     </div>
 
     <!-- Panneau Style / Propriétés -->
-    <div id="panel-props" class="sidebar-panel">
+    <div id="panel-props" class="sidebar-panel" role="tabpanel" aria-labelledby="tab-props" tabindex="0">
       <div class="prop-group">
         <div class="prop-label">Contour</div>
         <div class="prop-row">
@@ -530,7 +578,7 @@
     </div>
 
     <!-- Panneau Symboles -->
-    <div id="panel-symbols" class="sidebar-panel">
+    <div id="panel-symbols" class="sidebar-panel" role="tabpanel" aria-labelledby="tab-symbols" tabindex="0">
       <!-- Couleur des tracés des symboles -->
       <div style="display:flex;align-items:center;gap:8px;padding:7px 8px 6px;border-bottom:1px solid var(--border);flex-shrink:0">
         <span style="font-size:11px;color:var(--text-dim)">Couleur des tracés</span>
@@ -546,9 +594,9 @@
 <!-- ===== MODALS ===== -->
 
 <!-- Modal calibration par segment -->
-<div class="modal-backdrop" id="modal-calib">
+<div class="modal-backdrop" id="modal-calib" role="dialog" aria-modal="true" aria-labelledby="modal-calib-title">
   <div class="modal">
-    <h2>🎯 Calibration par segment</h2>
+    <h2 id="modal-calib-title">🎯 Calibration par segment</h2>
     <div class="modal-body">
       <label>Distance réelle mesurée
         <div style="display:flex;gap:8px;align-items:center;margin-top:3px">
@@ -570,9 +618,9 @@
 </div>
 
 <!-- Modal calibration par échelle -->
-<div class="modal-backdrop" id="modal-calib-scale">
+<div class="modal-backdrop" id="modal-calib-scale" role="dialog" aria-modal="true" aria-labelledby="modal-calib-scale-title">
   <div class="modal">
-    <h2>📏 Calibration par échelle</h2>
+    <h2 id="modal-calib-scale-title">📏 Calibration par échelle</h2>
     <div class="modal-body">
       <label>Échelle du plan
         <select id="scale-preset" style="margin-top:3px">
@@ -609,12 +657,19 @@
 </div>
 
 <!-- Modal export PDF -->
-<div class="modal-backdrop" id="modal-export">
+<div class="modal-backdrop" id="modal-export" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
   <div class="modal" style="max-width:440px">
-    <h2>⬇️ Exporter en PDF</h2>
+    <h2 id="modal-export-title">⬇️ Exporter en PDF</h2>
     <div class="modal-body">
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Calques à inclure dans l'export :</div>
       <div id="export-layers-list"></div>
+      <label style="margin-top:6px">Mode d'export
+        <select id="export-mode">
+          <option value="vector" selected>Vectoriel — recommandé (qualité et texte conservés)</option>
+          <option value="raster">Rastérisé — compatibilité (image aplatie)</option>
+        </select>
+      </label>
+      <div id="raster-options" style="display:none">
       <label style="margin-top:6px">Format de page
         <select id="export-format">
           <option value="original" selected>Original (taille du PDF source)</option>
@@ -629,6 +684,11 @@
           <option value="3">Très haute (×3 — lent)</option>
         </select>
       </label>
+      </div>
+      <p id="export-hint" style="font-size:11px;color:var(--text-dim);line-height:1.5;margin-top:4px">
+        Le mode vectoriel ajoute les annotations au PDF d'origine : le plan garde sa
+        qualité, son texte reste sélectionnable et le fichier reste léger.
+      </p>
     </div>
     <div class="modal-footer">
       <button class="modal-btn" id="export-cancel">Annuler</button>
@@ -638,9 +698,9 @@
 </div>
 
 <!-- Modal renommer calque -->
-<div class="modal-backdrop" id="modal-rename-layer">
+<div class="modal-backdrop" id="modal-rename-layer" role="dialog" aria-modal="true" aria-labelledby="modal-rename-layer-title">
   <div class="modal" style="max-width:320px">
-    <h2>✏️ Renommer le calque</h2>
+    <h2 id="modal-rename-layer-title">✏️ Renommer le calque</h2>
     <div class="modal-body">
       <label>Nouveau nom
         <input type="text" id="rename-layer-input" maxlength="40" style="margin-top:3px">
@@ -654,9 +714,9 @@
 </div>
 
 <!-- Modal aide raccourcis -->
-<div class="modal-backdrop" id="modal-help">
+<div class="modal-backdrop" id="modal-help" role="dialog" aria-modal="true" aria-labelledby="modal-help-title">
   <div class="modal" style="max-width:620px">
-    <h2>⌨️ Raccourcis clavier</h2>
+    <h2 id="modal-help-title">⌨️ Raccourcis clavier</h2>
     <div class="modal-body" id="help-body" style="max-height:60vh;overflow-y:auto"></div>
     <div class="modal-footer">
       <button class="modal-btn confirm" id="help-close">Fermer</button>
@@ -676,11 +736,15 @@
 <input type="file" id="input-custom-svg" accept=".svg,.png,.jpg,.jpeg" style="display:none">
 
 <!-- ===== SCRIPTS ===== -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Dépendances servies localement : l'application fonctionne hors ligne
+     (indispensable sur chantier). Versions figées dans vendor/. -->
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/fabric.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
 <script src="geometry.js"></script>
 <script src="migrate.js"></script>
+<script src="export-vector.js"></script>
 <script src="symbols.js"></script>
 <script src="app.js"></script>
 </body>
