@@ -398,6 +398,17 @@
       #thumbnails { height: 74px; }
     }
 
+    /* ===== v1.6 — RÉCAPITULATIF DES MESURES ===== */
+    .measures-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .measures-table th {
+      text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border);
+      color: var(--text-dim); font-size: 11px; text-transform: uppercase;
+      letter-spacing: .4px; position: sticky; top: 0; background: var(--panel);
+    }
+    .measures-table td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); }
+    .measures-table tbody tr:hover { background: var(--panel2); }
+    #stamp-list .icon-btn { padding: 5px 8px; font-size: 11px; }
+
     /* Scrollbar globale */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -471,6 +482,9 @@
     <button class="tool-btn" data-tool="text" title="Texte (T)">T</button>
     <div class="tool-sep"></div>
     <button class="tool-btn" data-tool="measure" title="Cote/Mesure (M)">⟵⟶</button>
+    <button class="tool-btn" data-tool="count" title="Compter (X) — un clic par élément">①</button>
+    <button class="tool-btn" data-tool="leader" title="Bulle de renvoi (A)">💬</button>
+    <button class="tool-btn" id="btn-area" title="Surface et périmètre de la sélection (S)">▦</button>
     <button class="tool-btn" data-tool="calibrate" title="Calibrer la page (K)">🎯</button>
     <div class="tool-sep"></div>
     <button class="tool-btn" id="btn-front" title="Premier plan (Ctrl+])">⬆</button>
@@ -480,6 +494,7 @@
     <button class="tool-btn" id="btn-redo" title="Rétablir (Ctrl+Maj+Z)">↪</button>
     <button class="tool-btn" id="btn-delete" title="Supprimer sélection (Suppr)">🗑</button>
     <div class="tool-sep"></div>
+    <button class="tool-btn" id="btn-measures" title="Récapitulatif des mesures (Ctrl+M)">Σ</button>
     <button class="tool-btn" id="btn-help" title="Raccourcis clavier (?)">?</button>
   </div>
 
@@ -501,6 +516,9 @@
         <span class="spinner"></span>
         <span class="progress-text"></span>
       </div>
+      <div id="leader-indicator" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(160,120,255,.92);color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;pointer-events:none;z-index:100">
+        💬 Cliquez l'emplacement de l'étiquette — Échap pour annuler
+      </div>
       <div id="measure-indicator" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(100,200,255,.9);color:#000;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;pointer-events:none;z-index:100">
         📏 Cliquez deux points pour mesurer — Échap pour annuler
       </div>
@@ -517,6 +535,7 @@
       <button class="sidebar-tab active" role="tab" aria-selected="true"  aria-controls="panel-layers"  id="tab-layers"  data-panel="layers">Calques</button>
       <button class="sidebar-tab"        role="tab" aria-selected="false" aria-controls="panel-props"   id="tab-props"   data-panel="props">Style</button>
       <button class="sidebar-tab"        role="tab" aria-selected="false" aria-controls="panel-symbols" id="tab-symbols" data-panel="symbols">Symboles</button>
+      <button class="sidebar-tab"        role="tab" aria-selected="false" aria-controls="panel-releve"  id="tab-releve"  data-panel="releve">Relevé</button>
     </div>
 
     <!-- Panneau Calques -->
@@ -587,6 +606,34 @@
         <button class="icon-btn" id="btn-import-symbol" data-needs-doc title="Importer un symbole personnalisé (SVG ou image)" style="font-size:11px;padding:1px 6px">＋ Importer</button>
       </div>
       <div id="symbol-library" style="padding:0 0 8px"></div>
+    </div>
+
+    <!-- Panneau Relevé -->
+    <div id="panel-releve" class="sidebar-panel" role="tabpanel" aria-labelledby="tab-releve" tabindex="0" style="padding:10px;gap:12px">
+      <div class="prop-group">
+        <div class="prop-label">Comptage — catégorie</div>
+        <input type="text" id="count-category" class="prop-select" value="Prise" placeholder="ex : Radiateur"
+               style="width:100%" aria-label="Catégorie de comptage">
+        <div id="count-total" style="font-size:11px;color:var(--accent);font-weight:600">Prise : 0</div>
+        <div style="font-size:11px;color:var(--text-dim);line-height:1.4">
+          Sélectionnez l'outil ① puis cliquez chaque élément : les repères se numérotent
+          automatiquement par catégorie.
+        </div>
+      </div>
+      <div class="prop-group">
+        <div class="prop-label">Tampons</div>
+        <div id="stamp-list" style="display:flex;flex-direction:column;gap:4px">
+          <button class="icon-btn" data-stamp="bpe"      style="text-align:left">🟢 BON POUR EXÉCUTION</button>
+          <button class="icon-btn" data-stamp="valider"  style="text-align:left">🟠 À VALIDER</button>
+          <button class="icon-btn" data-stamp="modifier" style="text-align:left">🔴 À MODIFIER</button>
+          <button class="icon-btn" data-stamp="vu"       style="text-align:left">🔵 VU</button>
+          <button class="icon-btn" data-stamp="annule"   style="text-align:left">⚪ ANNULÉ</button>
+        </div>
+      </div>
+      <div class="prop-group">
+        <div class="prop-label">Récapitulatif</div>
+        <button class="icon-btn" id="btn-measures-2" style="width:100%">Σ Voir les mesures</button>
+      </div>
     </div>
   </div>
 </div>
@@ -713,6 +760,18 @@
   </div>
 </div>
 
+<!-- Modal récapitulatif des mesures -->
+<div class="modal-backdrop" id="modal-measures" role="dialog" aria-modal="true" aria-labelledby="modal-measures-title">
+  <div class="modal" style="max-width:720px">
+    <h2 id="modal-measures-title">Σ Récapitulatif des mesures</h2>
+    <div class="modal-body" id="measures-body" style="max-height:58vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="measures-close">Fermer</button>
+      <button class="modal-btn confirm" id="measures-csv">⬇️ Exporter en CSV</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal aide raccourcis -->
 <div class="modal-backdrop" id="modal-help" role="dialog" aria-modal="true" aria-labelledby="modal-help-title">
   <div class="modal" style="max-width:620px">
@@ -745,6 +804,7 @@
 <script src="geometry.js"></script>
 <script src="migrate.js"></script>
 <script src="export-vector.js"></script>
+<script src="tools-metier.js"></script>
 <script src="symbols.js"></script>
 <script src="app.js"></script>
 </body>

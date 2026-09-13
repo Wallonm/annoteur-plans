@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.5.0';   // Lot 4 — Export vectoriel, hors ligne, accessibilité
+const APP_VERSION  = '1.6.0';   // Lot 5 — Outils métier
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -413,6 +413,8 @@ function handleMouseDown(opt) {
     case 'rect':      toolRect_down(pt);      break;
     case 'circle':    toolCircle_down(pt);    break;
     case 'text':      toolText_down(pt);      break;
+    case 'count':     toolCount_down(pt);     break;
+    case 'leader':    toolLeader_down(pt);    break;
     // freedraw géré nativement par Fabric (isDrawingMode)
   }
 }
@@ -445,7 +447,7 @@ function handleMouseMove(opt) {
     }
   }
 
-  if (!App.draw.active && App.activeTool !== 'calibrate' && App.activeTool !== 'measure') return;
+  if (!App.draw.active && !['calibrate', 'measure', 'leader'].includes(App.activeTool)) return;
 
   const pt = snapPoint(fc.getPointer(e), e);
 
@@ -491,6 +493,12 @@ function handleMouseMove(opt) {
           const p0 = App.draw.points[0];
           App.draw.closingLine.set({ x1: pt.x, y1: pt.y, x2: p0.x, y2: p0.y });
         }
+        fc.requestRenderAll();
+      }
+      break;
+    case 'leader':
+      if (App.draw.step === 1 && App.draw.previewLine) {
+        App.draw.previewLine.set({ x2: pt.x, y2: pt.y });
         fc.requestRenderAll();
       }
       break;
@@ -1541,6 +1549,7 @@ function setPageCalibration(pointsPerUnit, unit) {
   App.pageData[App.currentPage].calibration = { pointsPerUnit, unit };
   updateCalibrationUI();
   updateAllDimensionLabels();
+  updateAllAreaLabels();
   markDirty();
   const ech = pointsPerUnitToScale(pointsPerUnit, unit);
   showToast(`Calibration : 1 ${unit} = ${pointsPerUnit.toFixed(2)} pt` +
@@ -3030,6 +3039,20 @@ function initToolbar() {
   document.getElementById('btn-front')?.addEventListener('click', () => changeZOrder('front'));
   document.getElementById('btn-back') ?.addEventListener('click', () => changeZOrder('back'));
   document.getElementById('btn-help') ?.addEventListener('click', openHelp);
+  document.getElementById('btn-area')  ?.addEventListener('click', () => {
+    const sel = App.canvas.getActiveObject();
+    if (sel) addAreaLabel(sel); else showToast('Sélectionnez une forme fermée');
+  });
+  document.getElementById('btn-measures')?.addEventListener('click', openMeasuresModal);
+  document.getElementById('btn-measures-2')?.addEventListener('click', openMeasuresModal);
+  document.getElementById('measures-csv')?.addEventListener('click', exportMeasuresCSV);
+  document.getElementById('measures-close')?.addEventListener('click', () =>
+    closeModal(document.getElementById('modal-measures')));
+  document.getElementById('count-category')?.addEventListener('input', updateCountBadge);
+  document.getElementById('stamp-list')?.addEventListener('click', (e) => {
+    const id = e.target.closest('[data-stamp]')?.dataset.stamp;
+    if (id) placeStamp(id);
+  });
   document.getElementById('btn-delete').addEventListener('click', deleteSelected);
 
   // Champs L/H dans le header — Entrée ou blur pour appliquer
@@ -3186,6 +3209,7 @@ function changeZOrder(action) {
 const TOOL_SHORTCUTS = {
   v: 'select', h: 'pan', l: 'line', p: 'polyline', g: 'polygon', r: 'rect',
   c: 'circle', f: 'freedraw', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate',
+  x: 'count', a: 'leader',
 };
 
 const TOOL_LABELS = {
@@ -3193,6 +3217,7 @@ const TOOL_LABELS = {
   polygon: 'Polygone', rect: 'Rectangle', circle: 'Cercle / ellipse',
   freedraw: 'Dessin libre', cloud: 'Nuage de révision', text: 'Texte',
   measure: 'Cote / mesure', calibrate: 'Calibrer la page',
+  count: 'Compter (clic par élément)', leader: 'Bulle de renvoi',
 };
 
 const OTHER_SHORTCUTS = [
@@ -3222,6 +3247,10 @@ const OTHER_SHORTCUTS = [
   ['Tracé', [
     ['Maj (maintenu)',  'Contraindre l’angle à 45°'],
     ['Double-clic',     'Terminer une polyligne / fermer un polygone'],
+  ]],
+  ['Relevé', [
+    ['S',               'Surface et périmètre de la forme sélectionnée'],
+    ['Ctrl + M',        'Récapitulatif des mesures'],
   ]],
 ];
 
@@ -3676,6 +3705,15 @@ function initKeyboardShortcuts() {
     if (isCtrl && e.key === '[')    { e.preventDefault(); changeZOrder(e.shiftKey ? 'back'  : 'backward'); return; }
     if (isCtrl && e.key === 'Home') { e.preventDefault(); changeZOrder('front'); return; }
     if (isCtrl && e.key === 'End')  { e.preventDefault(); changeZOrder('back');  return; }
+
+    // Relevé
+    if (isCtrl && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); openMeasuresModal(); return; }
+    if (!isCtrl && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      const sel = App.canvas.getActiveObject();
+      if (sel) addAreaLabel(sel); else showToast('Sélectionnez une forme fermée');
+      return;
+    }
 
     // Aide
     if (e.key === '?' || e.key === 'F1') { e.preventDefault(); openHelp(); return; }

@@ -1,5 +1,37 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.6.0 — Lot 5 : Outils métier
+
+Les mesures ne vivaient que dans le dessin : impossible de les reprendre dans un devis.
+
+### Ajouté
+
+- **Surface et périmètre** (`S`, ou bouton ▦) sur un polygone ou un rectangle
+  sélectionné : une étiquette affiche les deux valeurs dans l'unité calibrée, et se
+  recalcule automatiquement si l'échelle de la page change.
+  Vérifié sur le plan réel : une pièce de 4 m × 5 m donne 200 000 cm² et 1 800 cm.
+- **Outil de comptage** (`X`) : un clic par élément, repère rond numéroté, numérotation
+  et couleur automatiques **par catégorie** (prises, radiateurs, portes…), continues sur
+  l'ensemble du document. Compteur en direct dans le panneau *Relevé*.
+- **Bulle de renvoi** (`A`) : deux clics — le point désigné puis l'emplacement du texte —
+  produisent une flèche et une étiquette éditable, groupées.
+- **Tampons** : BON POUR EXÉCUTION, À VALIDER, À MODIFIER, VU, ANNULÉ, datés du jour,
+  avec cadre et inclinaison.
+- **Récapitulatif des mesures** (`Ctrl+M`, ou bouton Σ) : tableau de toutes les cotes,
+  surfaces, périmètres et comptages du document, page par page et calque par calque,
+  comptages agrégés par catégorie.
+- **Export CSV** du récapitulatif, séparateur `;` et BOM UTF-8 : s'ouvre directement
+  dans Excel en français, décimales à la virgule.
+- Nouvel onglet **Relevé** dans le panneau latéral.
+
+Tous ces objets passent dans l'export vectoriel en texte réel et en tracés.
+
+### Qualité de code
+
+- `tools-metier.js` séparé ; 7 tests supplémentaires (41 au total) sur le format CSV,
+  l'agrégation des comptages, l'échappement des caractères et la cohérence
+  surface/périmètre de bout en bout.
+
 ## v1.5.0 — Lot 4 : Export vectoriel, hors ligne, accessibilité
 
 ### Ajouté — export vectoriel (mode par défaut)
