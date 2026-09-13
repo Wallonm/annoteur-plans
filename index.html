@@ -277,6 +277,63 @@
     #dim-display { display: none; align-items: center; gap: 4px; }
     #dim-unit { font-size: 11px; color: var(--text-dim); min-width: 22px; }
 
+    /* ===== v1.2 — ÉTAT DU DOCUMENT / REPRISE / PROGRESSION ===== */
+    #app-version { font-size: 10px; color: var(--text-dim); font-weight: 400; }
+    #doc-state {
+      display: flex; align-items: center; gap: 6px; padding: 0 6px;
+      font-size: 11px; color: var(--text-dim); max-width: 260px;
+    }
+    #doc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #doc-dirty { color: #f0a030; font-size: 14px; line-height: 1; display: none; }
+    #autosave-state { color: #50c060; white-space: nowrap; }
+
+    #recovery-bar {
+      display: none; align-items: center; gap: 10px;
+      padding: 8px 14px; background: #3a3320; border-bottom: 1px solid #7a6a30;
+      font-size: 12px; color: #f0d090; flex-shrink: 0;
+    }
+    #recovery-text { flex: 1; }
+
+    #progress {
+      display: none; align-items: center; gap: 10px;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(30,30,46,.96); border: 1px solid var(--accent);
+      padding: 14px 22px; border-radius: 8px; font-size: 13px;
+      z-index: 500; box-shadow: 0 6px 24px rgba(0,0,0,.5); pointer-events: none;
+    }
+    .spinner {
+      width: 15px; height: 15px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* État vide, affiché tant qu'aucun document n'est ouvert */
+    #empty-state {
+      display: none; position: absolute; inset: 0;
+      flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+      color: var(--text-dim); font-size: 13px; text-align: center; pointer-events: none;
+    }
+    body.no-document #empty-state { display: flex; }
+    body.no-document .tool-btn[data-tool] { opacity: .35; }
+    #canvas-wrapper.drag-over { outline: 3px dashed var(--accent); outline-offset: -12px; }
+
+    /* Vignette non encore rendue */
+    .thumb-placeholder {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim); font-size: 14px; background:
+        repeating-linear-gradient(45deg, #333 0 6px, #3a3a3a 6px 12px);
+    }
+
+    /* Le toast d'erreur doit se distinguer d'une simple information */
+    #toast.error {
+      background: #4a2020; border-color: var(--danger); color: #ffd0d0;
+      max-width: 60vw; text-align: center; line-height: 1.4;
+    }
+
+    .h-btn:disabled, .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .h-btn:disabled:hover { background: var(--panel2); border-color: var(--border); }
+
     /* Scrollbar globale */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -286,16 +343,29 @@
 <body>
 
 <!-- ===== HEADER ===== -->
+<!-- Barre de reprise après fermeture accidentelle -->
+<div id="recovery-bar">
+  <span>💾</span>
+  <span id="recovery-text"></span>
+  <button class="h-btn primary" id="recovery-restore">Restaurer</button>
+  <button class="h-btn" id="recovery-discard">Ignorer</button>
+</div>
+
 <header id="header">
-  <h1>📐 Annoteur Plans</h1>
+  <h1>📐 Annoteur Plans <span id="app-version"></span></h1>
   <div class="h-sep"></div>
   <button class="h-btn" id="btn-open-pdf" title="Importer un PDF">📂 Ouvrir PDF</button>
   <div class="h-dropdown" id="projet-dropdown">
     <button class="h-btn" id="btn-projet">📁 Projet ▾</button>
     <div class="h-dropdown-menu">
-      <button id="btn-load-project">📂 Ouvrir projet…</button>
-      <button id="btn-save-project">💾 Sauver projet</button>
+      <button id="btn-load-project" data-needs-doc>📂 Ouvrir projet…</button>
+      <button id="btn-save-project" data-needs-doc>💾 Sauver projet</button>
     </div>
+  </div>
+  <div id="doc-state">
+    <span id="doc-name">Aucun document</span>
+    <span id="doc-dirty" title="Modifications non sauvegardées">●</span>
+    <span id="autosave-state"></span>
   </div>
   <div class="h-sep"></div>
   <button class="h-btn" id="btn-zoom-out" title="Dézoomer (ou molette)">🔍−</button>
@@ -313,7 +383,7 @@
   <div class="h-sep"></div>
   <span id="page-info">— / —</span>
   <div class="spacer"></div>
-  <button class="h-btn primary" id="btn-export" title="Exporter en PDF">⬇️ Exporter PDF</button>
+  <button class="h-btn primary" id="btn-export" data-needs-doc title="Exporter en PDF">⬇️ Exporter PDF</button>
 </header>
 
 <!-- ===== MAIN ===== -->
@@ -347,6 +417,17 @@
         <canvas id="main-canvas"></canvas>
       </div>
       <div id="calib-indicator">🎯 Cliquez deux points pour calibrer — Échap pour annuler</div>
+      <!-- État vide : guide l'utilisateur tant qu'aucun PDF n'est ouvert -->
+      <div id="empty-state">
+        <div style="font-size:42px">📐</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text)">Aucun plan ouvert</div>
+        <div>Glissez un PDF ici, ou utilisez <strong>📂 Ouvrir PDF</strong></div>
+      </div>
+      <!-- Indicateur de progression persistant (chargement, export) -->
+      <div id="progress">
+        <span class="spinner"></span>
+        <span class="progress-text"></span>
+      </div>
       <div id="measure-indicator" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(100,200,255,.9);color:#000;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;pointer-events:none;z-index:100">
         📏 Cliquez deux points pour mesurer — Échap pour annuler
       </div>
@@ -387,7 +468,7 @@
       <div class="prop-group">
         <div class="prop-label">Remplissage</div>
         <div class="prop-row">
-          <input type="color" class="prop-color" id="prop-fill-color" value="#ff000022" title="Couleur de remplissage">
+          <input type="color" class="prop-color" id="prop-fill-color" value="#ff0000" title="Couleur de remplissage">
           <select class="prop-select" id="prop-fill-mode">
             <option value="transparent">Transparent</option>
             <option value="solid">Uni</option>
@@ -430,6 +511,7 @@
         <span style="font-size:11px;color:var(--text-dim)">Couleur des tracés</span>
         <input type="color" id="symbol-color" value="#000000" class="prop-color" title="Couleur des lignes des symboles placés">
         <button class="icon-btn" id="symbol-color-reset" title="Réinitialiser au noir" style="font-size:10px;padding:1px 5px">↺</button>
+        <button class="icon-btn" id="btn-import-symbol" data-needs-doc title="Importer un symbole personnalisé (SVG ou image)" style="font-size:11px;padding:1px 6px">＋ Importer</button>
       </div>
       <div id="symbol-library" style="padding:0 0 8px"></div>
     </div>

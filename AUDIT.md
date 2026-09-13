@@ -125,9 +125,12 @@ Mesures sur `plan_redresse_v4.pdf` (15 Mo, 7 pages) :
 |---|---|
 | `fetch` du fichier | 96 ms |
 | `pdfjsLib.getDocument` (parsing) | 202 ms |
-| **1 vignette de 62 px (page 1)** | **> 45 s** |
+| **1 vignette de 62 px** | **~11 s** (pages de 2599 × 3677 pt) |
+| **7 vignettes avant tout affichage** | **~77 s** |
 
-Après 70 s, **1 seule vignette sur 7** était rendue et la page 1 n'était toujours pas affichée. Le toast « Chargement du PDF… » disparaît au bout de 2,5 s : l'utilisateur voit une app figée sans explication. Avec `plan_redresse_toutes_pages.pdf` (**977 Mo**), c'est inexploitable — et `file.arrayBuffer()` ([app.js:1517](app.js:1517)) charge en plus tout le fichier en mémoire d'un bloc.
+> *Correction : une première mesure annonçait « > 45 s par vignette ». Elle était faussée par l'environnement de test (panneau navigateur masqué, `requestAnimationFrame` non déclenché, donc rendu pdf.js suspendu). La mesure corrigée est ~11 s par vignette. Le constat est inchangé : la page 1 n'apparaît qu'après le rendu des 7 vignettes.*
+
+Le toast « Chargement du PDF… » disparaît au bout de 2,5 s : l'utilisateur voit une app figée sans explication. Avec `plan_redresse_toutes_pages.pdf` (**977 Mo**), c'est inexploitable — et `file.arrayBuffer()` ([app.js:1517](app.js:1517)) charge en plus tout le fichier en mémoire d'un bloc.
 
 **Correctifs** :
 1. `await switchPage(1)` **avant** les vignettes (page 1 visible immédiatement).

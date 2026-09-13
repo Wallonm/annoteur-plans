@@ -2,6 +2,9 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
+const APP_VERSION  = '1.2.0';   // Lot 1 — Fiabilité
+const PROJECT_FORMAT = '1.1';   // version du format de fichier projet
+
 // === Configuration PDF.js ===
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -13,6 +16,13 @@ const App = {
   pdfDoc:       null,    // PDFDocumentProxy (PDF.js)
   currentPage:  1,
   totalPages:   0,
+
+  // Empreinte du PDF chargé — permet de vérifier qu'un projet correspond bien au plan
+  pdfInfo:      null,    // { fileName, byteSize, pageCount }
+  pdfBlob:      null,    // conservé pour la reprise après fermeture accidentelle
+
+  // Suivi des modifications non sauvegardées
+  dirty:        false,
 
   // Données par page : rotation, calibration, objets sérialisés, renderScale
   pageData: {},
@@ -92,8 +102,75 @@ document.addEventListener('DOMContentLoaded', () => {
   initModals();
   initSymbolLibrary();
   initKeyboardShortcuts();
+  initAutosave();
   updateCalibrationUI();
+  updateDocumentState();
+
+  const verEl = document.getElementById('app-version');
+  if (verEl) verEl.textContent = `v${APP_VERSION}`;
 });
+
+// ============================================================
+// OBJETS TEMPORAIRES (previews, marqueurs, poignées)
+// ------------------------------------------------------------
+// Ils sont balisés par data.temp pour ne JAMAIS être confondus avec
+// des annotations de l'utilisateur : les identifier par `!selectable`
+// détruisait les objets des calques verrouillés (bug v1.1).
+// ============================================================
+function tempProps(extra = {}) {
+  return {
+    selectable: false,
+    evented:    false,
+    excludeFromExport: true,
+    ...extra,
+    data: { temp: true, ...(extra.data || {}) },
+  };
+}
+
+// Un objet est-il temporaire (preview, marqueur, poignée) ?
+function isTempObject(o) {
+  const t = o?.data?.type;
+  return !!(o?.data?.temp || t === 'dimHandle' || t === 'polyHandle');
+}
+
+// Supprime tous les objets temporaires encore présents sur le canvas
+function removeTempObjects() {
+  const fc = App.canvas;
+  fc.getObjects().filter(isTempObject).forEach(o => fc.remove(o));
+}
+
+// ============================================================
+// SÉRIALISATION — point d'entrée unique
+// ------------------------------------------------------------
+// Utilisé par la sauvegarde de page, l'historique, l'autosave, la
+// sauvegarde de projet et l'export : un seul endroit décide de ce qui
+// est persistable, donc plus de poignées ni de previews dans les données.
+// ============================================================
+function serializePage(pageNum = App.currentPage) {
+  const json = App.canvas.toJSON(['data', 'objectType', 'strokeUniform']);
+  return json.objects
+    .filter((o, i) => {
+      const live = App.canvas.item(i);
+      if (isTempObject(o) || isTempObject(live)) return false;
+      return !o.data?.pageNum || o.data.pageNum === pageNum;
+    })
+    .map(stripVolatileData);
+}
+
+// Retire du `data` sérialisé tout ce qui ne doit pas être persisté
+// (références vers des objets Fabric vivants, caches internes)
+function stripVolatileData(obj) {
+  if (!obj?.data) return obj;
+  const { dimGroup, polyObj, _lastCenter, ...cleanData } = obj.data;
+  return { ...obj, data: cleanData };
+}
+
+// Marque le document comme modifié (déclenche autosave + garde-fou fermeture)
+function markDirty() {
+  App.dirty = true;
+  scheduleAutosave();
+  updateDocumentState();
+}
 
 // ============================================================
 // CANVAS FABRIC.JS — Création et gestion zoom/pan
@@ -226,6 +303,9 @@ function handleMouseDown(opt) {
   }
 
   if (App.activeTool === 'select') return; // Fabric gère
+
+  // Aucun document ouvert → aucun outil ne doit s'exécuter
+  if (!requireDocument()) return;
 
   // Si le dessin n'a pas encore commencé et qu'un objet existant est sous le curseur → sélectionner
   const drawInProgress = App.draw.active || App.draw.step > 0;
@@ -408,11 +488,27 @@ function handleDblClick(opt) {
 // --- Helpers communs ---
 // Crée automatiquement un calque "Annotations" si la page n'en a aucun
 function ensureActiveLayer() {
+  const pd = App.pageData[App.currentPage];
+  if (!pd) return false;                       // garde : aucun document ouvert
   if (App.layers.length === 0) {
     addLayer('Annotations');
-    App.pageData[App.currentPage].layers       = [...App.layers];
-    App.pageData[App.currentPage].activeLayerId = App.activeLayerId;
+    pd.layers        = [...App.layers];
+    pd.activeLayerId = App.activeLayerId;
   }
+  return true;
+}
+
+// Garde commune à tous les outils : refuse d'agir tant qu'aucun PDF n'est ouvert.
+// En v1.1, dessiner sans document levait un TypeError silencieux.
+let noDocWarned = 0;
+function requireDocument() {
+  if (App.pdfDoc && App.pageData[App.currentPage]) return true;
+  const now = Date.now();
+  if (now - noDocWarned > 1500) {       // ne pas spammer sur des clics répétés
+    noDocWarned = now;
+    showToast('Ouvrez d’abord un PDF (📂 Ouvrir PDF)');
+  }
+  return false;
 }
 
 function baseProps(extra = {}) {
@@ -525,6 +621,7 @@ function toolCircle_up(pt) {
 
 // --- Texte ---
 function toolText_down(pt) {
+  if (!requireDocument()) return;
   const fc = App.canvas;
   // Le clic qui a fermé une édition de textbox ne doit pas en ouvrir une nouvelle
   if (App._textJustExited) return;
@@ -564,10 +661,9 @@ function toolPolyline_down(pt) {
 
   // Segment de preview
   if (App.draw.previewLine) App.canvas.remove(App.draw.previewLine);
-  const prevLine = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
-    stroke: App.toolProps.strokeColor, strokeWidth: 1,
-    strokeDashArray: [4, 3], selectable: false, evented: false,
-  });
+  const prevLine = new fabric.Line([pt.x, pt.y, pt.x, pt.y], tempProps({
+    stroke: App.toolProps.strokeColor, strokeWidth: 1, strokeDashArray: [4, 3],
+  }));
   App.canvas.add(prevLine);
   App.draw.previewLine = prevLine;
   App.draw.active = true;
@@ -576,11 +672,12 @@ function toolPolyline_down(pt) {
   if (App.draw.points.length >= 2) {
     const pts = App.draw.points;
     const n = pts.length;
+    const tp = App.toolProps;
     const seg = new fabric.Line(
       [pts[n-2].x, pts[n-2].y, pts[n-1].x, pts[n-1].y],
-      { ...baseProps(), fill: '' }
+      tempProps({ stroke: tp.strokeColor, strokeWidth: tp.strokeWidth,
+                  strokeDashArray: tp.dashArray, opacity: tp.opacity, fill: '' })
     );
-    seg.set({ selectable: false, evented: false });
     App.canvas.add(seg);
   }
   App.draw.step = 1;
@@ -589,13 +686,10 @@ function toolPolyline_finish() {
   if (App.draw.points.length < 2) {
     resetDrawState(); return;
   }
-  if (App.draw.previewLine) App.canvas.remove(App.draw.previewLine);
   App.draw.previewLine = null;
-
-  // Construire la polyligne complète à partir des points
-  const pts = App.draw.points.flatMap(p => [p.x, p.y]);
-  // Supprimer les segments temporaires (non sélectionnables)
-  App.canvas.getObjects('line').filter(o => !o.selectable).forEach(o => App.canvas.remove(o));
+  // Supprimer les segments temporaires (balisés data.temp — jamais par `selectable`,
+  // qui vaut false aussi sur les objets des calques verrouillés)
+  removeTempObjects();
 
   const polyline = new fabric.Polyline(App.draw.points, {
     ...baseProps(),
@@ -621,10 +715,10 @@ function toolPolygon_down(pt) {
 
   // Ligne de preview depuis ce point vers la souris
   if (App.draw.previewLine) App.canvas.remove(App.draw.previewLine);
-  const prevLine = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
+  const prevLine = new fabric.Line([pt.x, pt.y, pt.x, pt.y], tempProps({
     stroke: App.toolProps.strokeColor, strokeWidth: 1,
-    strokeDashArray: [4, 3], selectable: false, evented: false, opacity: 0.7,
-  });
+    strokeDashArray: [4, 3], opacity: 0.7,
+  }));
   App.canvas.add(prevLine);
   App.draw.previewLine = prevLine;
 
@@ -634,9 +728,8 @@ function toolPolygon_down(pt) {
     const n   = pts.length;
     const seg = new fabric.Line(
       [pts[n-2].x, pts[n-2].y, pts[n-1].x, pts[n-1].y],
-      { stroke: App.toolProps.strokeColor, strokeWidth: App.toolProps.strokeWidth,
-        strokeDashArray: App.toolProps.dashArray,
-        selectable: false, evented: false }
+      tempProps({ stroke: App.toolProps.strokeColor, strokeWidth: App.toolProps.strokeWidth,
+                  strokeDashArray: App.toolProps.dashArray })
     );
     App.canvas.add(seg);
 
@@ -644,8 +737,8 @@ function toolPolygon_down(pt) {
     if (App.draw.closingLine) App.canvas.remove(App.draw.closingLine);
     const closingLine = new fabric.Line(
       [pts[n-1].x, pts[n-1].y, pts[0].x, pts[0].y],
-      { stroke: App.toolProps.strokeColor, strokeWidth: 1,
-        strokeDashArray: [3, 5], selectable: false, evented: false, opacity: 0.45 }
+      tempProps({ stroke: App.toolProps.strokeColor, strokeWidth: 1,
+                  strokeDashArray: [3, 5], opacity: 0.45 })
     );
     App.canvas.add(closingLine);
     App.draw.closingLine = closingLine;
@@ -656,12 +749,10 @@ function toolPolygon_down(pt) {
 function toolPolygon_finish() {
   if (App.draw.points.length < 3) { resetDrawState(); return; }
 
-  // Supprimer tous les objets temporaires
-  if (App.draw.previewLine) App.canvas.remove(App.draw.previewLine);
-  if (App.draw.closingLine) App.canvas.remove(App.draw.closingLine);
+  // Supprimer tous les objets temporaires (balisés data.temp)
   App.draw.previewLine = null;
   App.draw.closingLine = null;
-  App.canvas.getObjects('line').filter(o => !o.selectable).forEach(o => App.canvas.remove(o));
+  removeTempObjects();
 
   const tp = App.toolProps;
   const polygon = new fabric.Polygon(App.draw.points, {
@@ -687,6 +778,7 @@ function toolPolygon_finish() {
 
 // --- Dessin libre (géré par Fabric isDrawingMode) ---
 function toolFreeDraw_activate() {
+  if (!requireDocument()) { setActiveTool('select'); return; }
   ensureActiveLayer();
   const fc = App.canvas;
   fc.isDrawingMode = true;
@@ -716,7 +808,7 @@ function makeCrossMarker(x, y, size, color) {
   const s = size;
   return new fabric.Path(
     `M ${x - s} ${y} L ${x + s} ${y} M ${x} ${y - s} L ${x} ${y + s}`,
-    { stroke: color, strokeWidth: 2, fill: '', selectable: false, evented: false }
+    tempProps({ stroke: color, strokeWidth: 2, fill: '' })
   );
 }
 
@@ -735,21 +827,19 @@ function toolMeasure_down(pt) {
     App.draw.dimDot1 = dot1;
 
     // Ligne filigrane p1→souris
-    const pl = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
-      stroke: '#00aaff', strokeWidth: 1.5, strokeDashArray: [5, 3],
-      selectable: false, evented: false, opacity: 0.75,
-    });
+    const pl = new fabric.Line([pt.x, pt.y, pt.x, pt.y], tempProps({
+      stroke: '#00aaff', strokeWidth: 1.5, strokeDashArray: [5, 3], opacity: 0.75,
+    }));
     fc.add(pl);
     App.draw.previewLine = pl;
 
     // Étiquette de mesure (dès le 1er clic)
-    const ptxt = new fabric.Text('0', {
+    const ptxt = new fabric.Text('0', tempProps({
       left: pt.x, top: pt.y - 14,
       fontSize: 12, fill: '#0077cc', fontWeight: 'bold',
       originX: 'center', originY: 'bottom',
       backgroundColor: 'rgba(255,255,255,0.85)', padding: 2,
-      selectable: false, evented: false,
-    });
+    }));
     fc.add(ptxt);
     App.draw.previewText = ptxt;
 
@@ -807,10 +897,9 @@ function toolCalibrate_down(pt) {
     App.draw.step    = 1;
     App.draw.startPt = { x: pt.x, y: pt.y };
 
-    const line = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
+    const line = new fabric.Line([pt.x, pt.y, pt.x, pt.y], tempProps({
       stroke: '#ffcc00', strokeWidth: 2, strokeDashArray: [6, 3],
-      selectable: false, evented: false,
-    });
+    }));
     App.canvas.add(line);
     App.draw.previewLine = line;
     showIndicator('calib-indicator');
@@ -828,7 +917,7 @@ function toolCalibrate_down(pt) {
     // Afficher la modale de saisie
     document.getElementById('calib-px-dist').textContent = Math.round(pixelDist);
     document.getElementById('calib-real-dist').value     = '';
-    document.getElementById('modal-calib').classList.add('open');
+    openModal('modal-calib');
 
     // Stocker la distance pixel en attente de confirmation
     App._pendingCalibPixels = pixelDist;
@@ -951,7 +1040,7 @@ function computeDimGeometry(p1, p2, offsetPt) {
 // La mesure réelle s'affiche dès l'étape 2 (offset en cours)
 function createDimPreviewObjects(geo, p1, p2) {
   const fc = App.canvas;
-  const ph = { stroke: '#00aaff', strokeWidth: 1.5, strokeDashArray: [5, 3], selectable: false, evented: false, opacity: 0.75, fill: '' };
+  const ph = tempProps({ stroke: '#00aaff', strokeWidth: 1.5, strokeDashArray: [5, 3], opacity: 0.75, fill: '' });
 
   const coteLine = new fabric.Line([geo.c1.x, geo.c1.y, geo.c2.x, geo.c2.y], ph);
   const ext1     = new fabric.Line([geo.e1s.x, geo.e1s.y, geo.e1e.x, geo.e1e.y], ph);
@@ -963,15 +1052,14 @@ function createDimPreviewObjects(geo, p1, p2) {
   const label    = formatDimension(pixDist, calib);
   const txtAngle = (geo.angle > 90 || geo.angle < -90) ? geo.angle + 180 : geo.angle;
 
-  const text = new fabric.Text(label, {
+  const text = new fabric.Text(label, tempProps({
     left: geo.mid.x, top: geo.mid.y,
     fontSize: 12, fill: '#0077cc', fontWeight: 'bold',
     originX: 'center', originY: 'bottom',
     angle: txtAngle,
     backgroundColor: 'rgba(255,255,255,0.85)',
     padding: 2,
-    selectable: false, evented: false,
-  });
+  }));
 
   [coteLine, ext1, ext2, text].forEach(o => fc.add(o));
   return { coteLine, ext1, ext2, text, p1, p2 };
@@ -998,9 +1086,9 @@ function showDimHandles(group) {
   const d = group?.data;
   if (!d?.p1 || !d?.p2 || !d?.offsetPt) return;
 
-  const h1 = makeDimHandle(d.p1,      'dimP1',  group);
-  const h2 = makeDimHandle(d.p2,      'dimP2',  group);
-  const h3 = makeDimHandle(d.offsetPt,'dimOff', group);
+  const h1 = makeDimHandle(d.p1,       'dimP1');
+  const h2 = makeDimHandle(d.p2,       'dimP2');
+  const h3 = makeDimHandle(d.offsetPt, 'dimOff');
   [h1, h2, h3].forEach(h => App.canvas.add(h));
 
   App.activeDimHandles = { h1, h2, h3, dimGroup: group, previewObjs: null };
@@ -1020,7 +1108,10 @@ function removeDimHandles() {
 }
 
 // Crée une poignée draggable (croix bleue) à la position donnée
-function makeDimHandle(pt, role, dimGroup) {
+// NB : aucune référence vers le groupe cote n'est stockée dans `data` — elle serait
+// sérialisée (fichier projet gonflé + croix orphelines au rechargement).
+// Le groupe vit dans App.activeDimHandles.dimGroup.
+function makeDimHandle(pt, role) {
   const s = 8;
   return new fabric.Path(`M ${-s} 0 L ${s} 0 M 0 ${-s} L 0 ${s}`, {
     left: pt.x, top: pt.y,
@@ -1030,7 +1121,8 @@ function makeDimHandle(pt, role, dimGroup) {
     hasBorders: false, hasControls: false,
     lockRotation: true, lockScalingX: true, lockScalingY: true,
     perPixelTargetFind: true,
-    data: { type: 'dimHandle', role, dimGroup },
+    excludeFromExport: true,
+    data: { type: 'dimHandle', role },
   });
 }
 
@@ -1129,7 +1221,6 @@ function rebuildDimensionFromHandles() {
 
   // Mettre à jour les références dans les poignées
   handles.dimGroup = newGroup;
-  [handles.h1, handles.h2, handles.h3].forEach(h => { if (h) h.data.dimGroup = newGroup; });
   newGroup.set({ hasControls: false, borderColor: '#00aaff', borderDashArray: [4, 2] });
 
   fc.requestRenderAll();
@@ -1165,7 +1256,8 @@ function showPolyHandles(obj) {
       hasBorders: false, hasControls: false,
       lockRotation: true, lockScalingX: true, lockScalingY: true,
       perPixelTargetFind: true,
-      data: { type: 'polyHandle', ptIndex: i, polyObj: obj },
+      excludeFromExport: true,
+      data: { type: 'polyHandle', ptIndex: i },
     });
     App.canvas.add(h);
     return h;
@@ -1224,7 +1316,6 @@ function rebuildPolyFromHandles(saveHistory) {
   newObj.set({ hasControls: false, borderColor: '#ffaa00', borderDashArray: [4, 2], visible: true });
 
   // Mettre à jour les références dans les poignées
-  handles.forEach(h => { h.data.polyObj = newObj; });
   state.obj = newObj;
 
   if (saveHistory) saveHistoryState();
@@ -1507,41 +1598,124 @@ function updateCalibrationUI() {
 // ============================================================
 // PDF — Chargement et rendu
 // ============================================================
-async function loadPDF(file) {
-  showToast('Chargement du PDF…');
-  const arrayBuffer = await file.arrayBuffer();
-  App.pdfDoc     = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  App.totalPages = App.pdfDoc.numPages;
-  App.currentPage = 1;
+// Seuil au-delà duquel on prévient l'utilisateur (le PDF est chargé en mémoire)
+const BIG_PDF_WARN_BYTES = 100 * 1024 * 1024;
 
-  // Initialiser pageData pour chaque page
-  for (let i = 1; i <= App.totalPages; i++) {
-    App.pageData[i] = App.pageData[i] || {
-      rotation:    0,
-      calibration: null,
-      objects:     [],       // objets Fabric sérialisés
-      renderScale: 1,
-    };
+async function loadPDF(file) {
+  // Un document est déjà ouvert avec des modifications non sauvegardées ?
+  if (App.pdfDoc && App.dirty &&
+      !confirm('Des annotations non sauvegardées vont être perdues. Ouvrir quand même ce PDF ?')) {
+    return;
   }
 
-  // Supprimer le hint
-  document.getElementById('thumb-hint')?.remove();
+  if (file.size > BIG_PDF_WARN_BYTES) {
+    const mb = Math.round(file.size / 1024 / 1024);
+    if (!confirm(`Ce PDF fait ${mb} Mo. Il sera entièrement chargé en mémoire et le rendu ` +
+                 `de chaque page peut être long.\n\nContinuer ?`)) return;
+  }
 
-  await renderThumbnails();
-  await switchPage(1);
-  showToast(`PDF chargé — ${App.totalPages} page(s)`);
+  setProgress(`Lecture de ${file.name}…`);
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+
+    // Réinitialisation COMPLÈTE : sans ça les annotations du document
+    // précédent se superposaient au nouveau plan.
+    resetDocumentState();
+
+    App.pdfBlob    = file;
+    App.pdfDoc     = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    App.totalPages = App.pdfDoc.numPages;
+    App.currentPage = 1;
+    App.pdfInfo    = { fileName: file.name, byteSize: file.size, pageCount: App.totalPages };
+
+    for (let i = 1; i <= App.totalPages; i++) {
+      App.pageData[i] = {
+        rotation:    0,
+        calibration: null,
+        objects:     [],       // objets Fabric sérialisés
+        renderScale: 1,
+      };
+    }
+
+    document.getElementById('thumb-hint')?.remove();
+
+    // La page 1 s'affiche AVANT les vignettes : en v1.1 le rendu séquentiel
+    // des N vignettes gelait l'application plusieurs minutes avant tout affichage.
+    setProgress('Rendu de la page 1…');
+    await switchPage(1);
+
+    buildThumbnailStrip();          // squelettes immédiats
+    startLazyThumbnails();          // rendus à la demande, 1 à la fois
+
+    updateDocumentState();
+    clearProgress();
+    showToast(`${file.name} — ${App.totalPages} page(s)`);
+
+    // Reprise différée : le PDF était trop volumineux pour être stocké,
+    // on réapplique le projet dès que l'utilisateur rouvre le bon fichier.
+    if (App._pendingRecovery) {
+      const proj = App._pendingRecovery;
+      App._pendingRecovery = null;
+      await loadProject(JSON.stringify(proj));
+      App.dirty = true;
+      updateDocumentState();
+    }
+  } catch (err) {
+    console.error(err);
+    resetDocumentState();
+    clearProgress();
+    showError(`Impossible d'ouvrir ce PDF : ${describeError(err)}`);
+  }
 }
 
-// Génère toutes les vignettes
-async function renderThumbnails() {
+// Remet à zéro tout l'état lié au document (appelé avant chaque ouverture)
+function resetDocumentState() {
+  resetDrawState();
+  App.canvas?.remove(...(App.canvas.getObjects() || []));
+  App.pdfDoc        = null;
+  App.pdfInfo       = null;
+  App.pdfBlob       = null;
+  App.totalPages    = 0;
+  App.currentPage   = 1;
+  App.pageData      = {};
+  App.layers        = [];
+  App.activeLayerId = null;
+  App.nextLayerId   = 1;
+  App.history       = [];
+  App.historyIndex  = -1;
+  App.clipboard     = null;
+  App.dirty         = false;
+  renderLayersList();
+  App.canvas?.requestRenderAll();
+}
+
+// ------------------------------------------------------------
+// Vignettes paresseuses : squelettes instantanés, rendu à la demande
+// ------------------------------------------------------------
+const Thumbs = {
+  observer: null,
+  queue:    [],       // numéros de page en attente de rendu
+  busy:     false,    // un seul rendu à la fois (pdf.js sature le thread sinon)
+  done:     new Set(),
+};
+
+function buildThumbnailStrip() {
   const strip = document.getElementById('thumbnails');
   strip.innerHTML = '';
+  Thumbs.done.clear();
+  Thumbs.queue = [];
+
   for (let i = 1; i <= App.totalPages; i++) {
     const div = document.createElement('div');
     div.className = `thumb${i === App.currentPage ? ' active' : ''}`;
     div.dataset.page = i;
     div.title = `Page ${i}`;
     div.addEventListener('click', () => switchPage(i));
+
+    const ph = document.createElement('div');
+    ph.className = 'thumb-placeholder';
+    ph.textContent = '…';
 
     const numSpan = document.createElement('span');
     numSpan.className = 'thumb-num';
@@ -1553,15 +1727,73 @@ async function renderThumbnails() {
     rotBtn.title = 'Rotation 90°';
     rotBtn.addEventListener('click', (e) => { e.stopPropagation(); rotatePage(i); });
 
-    const thumbCanvas = document.createElement('canvas');
-    div.appendChild(thumbCanvas);
-    div.appendChild(numSpan);
-    div.appendChild(rotBtn);
+    div.append(ph, numSpan, rotBtn);
     strip.appendChild(div);
-
-    // Rendre la vignette
-    await renderPageToCanvas(i, thumbCanvas, 62);
   }
+}
+
+function startLazyThumbnails() {
+  Thumbs.observer?.disconnect();
+  const strip = document.getElementById('thumbnails');
+
+  Thumbs.observer = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      const pn = Number(en.target.dataset.page);
+      if (!Thumbs.done.has(pn) && !Thumbs.queue.includes(pn)) {
+        Thumbs.queue.push(pn);
+        drainThumbQueue();
+      }
+    });
+  }, { root: strip, rootMargin: '200px' });
+
+  strip.querySelectorAll('.thumb').forEach(t => Thumbs.observer.observe(t));
+
+  // Filet de sécurité : les premières vignettes sont toujours visibles, on les
+  // met en file sans attendre l'observateur (qui peut ne jamais se déclencher
+  // si l'onglet est en arrière-plan au chargement).
+  for (let i = 1; i <= Math.min(8, App.totalPages); i++) {
+    if (!Thumbs.queue.includes(i)) Thumbs.queue.push(i);
+  }
+  drainThumbQueue();
+}
+
+async function drainThumbQueue() {
+  if (Thumbs.busy) return;
+  Thumbs.busy = true;
+  try {
+    while (Thumbs.queue.length) {
+      // Priorité à la page courante si elle est dans la file
+      const idx = Thumbs.queue.indexOf(App.currentPage);
+      const pn  = Thumbs.queue.splice(idx >= 0 ? idx : 0, 1)[0];
+      if (Thumbs.done.has(pn) || !App.pdfDoc) continue;
+      await renderThumbnail(pn);
+      Thumbs.done.add(pn);
+      // Laisser respirer l'interface entre deux pages lourdes
+      await new Promise(r => setTimeout(r, 0));
+    }
+  } catch (err) {
+    console.warn('Vignette non rendue :', err);
+  } finally {
+    Thumbs.busy = false;
+  }
+}
+
+async function renderThumbnail(pageNum) {
+  const div = document.querySelector(`.thumb[data-page="${pageNum}"]`);
+  if (!div) return;
+  const canvasEl = document.createElement('canvas');
+  await renderPageToCanvas(pageNum, canvasEl, 62);
+  div.querySelector('.thumb-placeholder')?.remove();
+  div.querySelector('canvas')?.remove();
+  div.prepend(canvasEl);
+}
+
+// Force le re-rendu d'une vignette déjà générée (après rotation)
+async function refreshThumbnail(pageNum) {
+  Thumbs.done.delete(pageNum);
+  if (!Thumbs.queue.includes(pageNum)) Thumbs.queue.push(pageNum);
+  await drainThumbQueue();
 }
 
 // Rendu d'une page PDF dans un <canvas> HTML (pour vignettes)
@@ -1582,8 +1814,12 @@ async function renderPageToCanvas(pageNum, canvasEl, maxW) {
 async function switchPage(pageNum) {
   if (!App.pdfDoc || pageNum < 1 || pageNum > App.totalPages) return;
 
-  // Sauvegarder les objets de la page courante
-  if (App.canvas) saveCurrentPageObjects();
+  // IMPORTANT : nettoyer AVANT de sauvegarder, sinon les poignées et previews
+  // encore présents sur le canvas sont persistés comme des annotations.
+  if (App.canvas) {
+    resetDrawState();
+    saveCurrentPageObjects();
+  }
 
   App.currentPage = pageNum;
 
@@ -1641,52 +1877,44 @@ async function renderCurrentPage() {
   App.pageData[App.currentPage].canvasOffsetX = tx;
   App.pageData[App.currentPage].canvasOffsetY = ty;
 
-  // Définir le fond PDF
-  return new Promise(resolve => {
-    fc.setBackgroundImage(
-      offCanvas.toDataURL('image/jpeg', 0.9),
-      () => {
-        fc.backgroundImage.set({
-          left: tx, top: ty,
-          originX: 'left', originY: 'top',
-          scaleX: 1, scaleY: 1,
-        });
-        // Réinitialiser le viewport transform (supprime zoom/pan précédents)
-        fc.setViewportTransform([1, 0, 0, 1, 0, 0]);
-        updateZoomDisplay();
-        fc.requestRenderAll();
-        resolve();
-      },
-      { crossOrigin: 'anonymous' }
-    );
+  // Fond PDF : image construite DIRECTEMENT depuis le canvas hors-écran.
+  // La v1.1 passait par offCanvas.toDataURL('image/jpeg', 0.9) :
+  //  - recompression JPEG d'un plan au trait (artefacts sur les lignes fines),
+  //  - data-URL de plusieurs Mo maintenue en mémoire,
+  //  - et surtout un chargement d'<img> asynchrone qui, en cas d'échec,
+  //    n'appelait jamais le callback → application figée sans message.
+  const bg = new fabric.Image(offCanvas, {
+    left: tx, top: ty,
+    originX: 'left', originY: 'top',
+    scaleX: 1, scaleY: 1,
+    selectable: false, evented: false,
   });
+  fc.setBackgroundImage(bg, () => {});   // objet Fabric → appel synchrone
+
+  // Réinitialiser le viewport transform (supprime zoom/pan précédents)
+  fc.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  updateZoomDisplay();
+  fc.requestRenderAll();
 }
 
 // Rotation d'une page (cumul 90°)
 async function rotatePage(pageNum) {
-  if (!App.pdfDoc) return;
+  if (!App.pdfDoc || !App.pageData[pageNum]) return;
   App.pageData[pageNum].rotation = ((App.pageData[pageNum].rotation || 0) + 90) % 360;
-  // Mettre à jour la vignette
-  const thumbDiv = document.querySelector(`.thumb[data-page="${pageNum}"]`);
-  if (thumbDiv) {
-    const tc = thumbDiv.querySelector('canvas');
-    if (tc) await renderPageToCanvas(pageNum, tc, 62);
-  }
+  await refreshThumbnail(pageNum);
   if (pageNum === App.currentPage) await renderCurrentPage();
+  markDirty();
 }
 
 // ============================================================
 // GESTION DES OBJETS FABRIC PAR PAGE
 // ============================================================
 function saveCurrentPageObjects() {
-  const fc = App.canvas;
-  const json = fc.toJSON(['data', 'objectType']);
-  App.pageData[App.currentPage].objects = json.objects.filter(
-    o => !o.data?.pageNum || o.data.pageNum === App.currentPage
-  );
-  // Sauvegarder les calques propres à cette page
-  App.pageData[App.currentPage].layers        = [...App.layers];
-  App.pageData[App.currentPage].activeLayerId = App.activeLayerId;
+  const pd = App.pageData[App.currentPage];
+  if (!pd) return;                       // pas de PDF chargé → rien à sauvegarder
+  pd.objects       = serializePage(App.currentPage);
+  pd.layers        = [...App.layers];
+  pd.activeLayerId = App.activeLayerId;
 }
 
 function loadPageObjects() {
@@ -2026,6 +2254,7 @@ function recolorSelectedSymbol(color) {
 }
 
 function placeSymbol(symbolId, x, y) {
+  if (!requireDocument()) return;
   const sym = SYMBOL_CATEGORIES.flatMap(c => c.symbols).find(s => s.id === symbolId);
   if (!sym) return;
 
@@ -2112,56 +2341,123 @@ function handleSymbolDrop(e) {
 // ============================================================
 // SAUVEGARDE / CHARGEMENT DU PROJET
 // ============================================================
-function saveProject() {
-  if (!App.pdfDoc) { showToast('Aucun PDF chargé'); return; }
+// Nom de fichier dérivé du PDF source plutôt qu'un nom fixe
+function projectFileName() {
+  const base = (App.pdfInfo?.fileName || 'projet').replace(/\.pdf$/i, '');
+  return `${base}.annot.json`;
+}
+
+function buildProjectData() {
   saveCurrentPageObjects();
-
-  const projectData = {
-    version:    '1.1',
-    totalPages: App.totalPages,
+  return {
+    version:     PROJECT_FORMAT,
+    appVersion:  APP_VERSION,
+    savedAt:     new Date().toISOString(),
+    // Empreinte du PDF : permet de détecter qu'on applique un projet au mauvais plan
+    source:      App.pdfInfo,
+    totalPages:  App.totalPages,
     nextLayerId: App.nextLayerId,
-    pages:      App.pageData, // calques inclus dans chaque pageData[pn]
+    pages:       App.pageData, // calques inclus dans chaque pageData[pn]
   };
+}
 
-  const json = JSON.stringify(projectData, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'projet.annot.json';
+function saveProject() {
+  if (!requireDocument()) return;
+  try {
+    const json = JSON.stringify(buildProjectData(), null, 2);
+    downloadBlob(new Blob([json], { type: 'application/json' }), projectFileName());
+    App.dirty = false;
+    updateDocumentState();
+    showToast(`Projet sauvegardé — ${projectFileName()}`);
+  } catch (err) {
+    console.error(err);
+    showError(`Sauvegarde impossible : ${describeError(err)}`);
+  }
+}
+
+// Télécharge un Blob sous un nom donné (révocation différée : Firefox annule sinon)
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
-  showToast('Projet sauvegardé ✓');
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// Vérifie que le projet correspond bien au PDF ouvert. N'empêche pas le chargement
+// (un PDF ré-exporté change de taille) mais prévient explicitement.
+function checkProjectMatchesPdf(data) {
+  const src = data.source;
+  const cur = App.pdfInfo;
+  if (!src || !cur) return true;
+
+  const problems = [];
+  if (src.pageCount && src.pageCount !== cur.pageCount)
+    problems.push(`${src.pageCount} page(s) attendues, ${cur.pageCount} ouverte(s)`);
+  if (src.fileName && src.fileName !== cur.fileName)
+    problems.push(`fichier « ${src.fileName} » attendu, « ${cur.fileName} » ouvert`);
+  else if (src.byteSize && src.byteSize !== cur.byteSize)
+    problems.push('la taille du fichier a changé');
+
+  if (!problems.length) return true;
+  return confirm(
+    `⚠️ Ce projet ne semble pas correspondre au PDF ouvert :\n\n` +
+    problems.map(p => `  • ${p}`).join('\n') +
+    `\n\nLes annotations risquent d'être mal placées. Charger quand même ?`
+  );
 }
 
 async function loadProject(jsonStr) {
+  if (!requireDocument()) return;
+
   let data;
-  try { data = JSON.parse(jsonStr); } catch { showToast('Fichier invalide'); return; }
+  try {
+    data = JSON.parse(jsonStr);
+  } catch (err) {
+    showError(`Fichier projet illisible : ${describeError(err)}`);
+    return;
+  }
+  if (!data || typeof data !== 'object' || !data.pages) {
+    showError('Ce fichier n’est pas un projet Annoteur valide.');
+    return;
+  }
+  if (!checkProjectMatchesPdf(data)) return;
 
-  App.nextLayerId = data.nextLayerId || 1;
+  try {
+    App.nextLayerId = data.nextLayerId || 1;
 
-  // Restaurer les données de pages (calibration, rotation, objets, calques)
-  Object.keys(data.pages || {}).forEach(p => {
-    const pn = Number(p);
-    App.pageData[pn] = App.pageData[pn] || {};
-    Object.assign(App.pageData[pn], data.pages[p]);
-    // Compatibilité v1.0 : calques globaux migrés sur toutes les pages
-    if (!App.pageData[pn].layers && data.layers) {
-      App.pageData[pn].layers        = [...data.layers];
-      App.pageData[pn].activeLayerId = data.layers[0]?.id || null;
-    }
-  });
+    // Restaurer les données de pages (calibration, rotation, objets, calques)
+    Object.keys(data.pages).forEach(p => {
+      const pn = Number(p);
+      if (!Number.isFinite(pn) || pn < 1 || pn > App.totalPages) return;  // page hors document
+      App.pageData[pn] = App.pageData[pn] || {};
+      Object.assign(App.pageData[pn], data.pages[p]);
+      if (!Array.isArray(App.pageData[pn].objects)) App.pageData[pn].objects = [];
+      // Compatibilité v1.0 : calques globaux migrés sur toutes les pages
+      if (!App.pageData[pn].layers && data.layers) {
+        App.pageData[pn].layers        = [...data.layers];
+        App.pageData[pn].activeLayerId = data.layers[0]?.id || null;
+      }
+    });
 
-  // Recharger la page courante SANS sauvegarder le canvas (qui est vide à ce stade)
-  // et écraserait les objets qu'on vient de restaurer.
-  const pd = App.pageData[App.currentPage] || {};
-  App.layers        = [...(pd.layers        || [])];
-  App.activeLayerId = pd.activeLayerId || null;
-  renderLayersList();
-  await renderCurrentPage();
-  loadPageObjects();
-  updateCalibrationUI();
-  showToast('Projet chargé ✓');
+    // Recharger la page courante SANS sauvegarder le canvas (qui est vide à ce stade)
+    // et écraserait les objets qu'on vient de restaurer.
+    const pd = App.pageData[App.currentPage] || {};
+    App.layers        = [...(pd.layers        || [])];
+    App.activeLayerId = pd.activeLayerId || null;
+    renderLayersList();
+    await renderCurrentPage();
+    loadPageObjects();
+    updateCalibrationUI();
+    App.dirty = false;
+    updateDocumentState();
+    showToast('Projet chargé ✓');
+  } catch (err) {
+    console.error(err);
+    showError(`Chargement du projet impossible : ${describeError(err)}`);
+  }
 }
 
 // ============================================================
@@ -2175,11 +2471,10 @@ const PAPER_FORMATS = {
 };
 
 async function exportPDF(selectedLayerIds, resolution, format = 'original') {
-  if (!App.pdfDoc) { showToast('Aucun PDF chargé'); return; }
-  showToast('Export en cours…');
+  if (!requireDocument()) return;
+  setProgress('Export : préparation…');
 
   const { jsPDF } = window.jspdf;
-  const savedPage = App.currentPage;
   const fc        = App.canvas;
   const dpiMult   = parseFloat(resolution) || 2;
   const paperFmt  = PAPER_FORMATS[format] || null; // null = format original
@@ -2201,6 +2496,7 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
 
   try {
     for (let pn = 1; pn <= App.totalPages; pn++) {
+      setProgress(`Export : page ${pn} / ${App.totalPages}…`);
       const pdfPage   = await App.pdfDoc.getPage(pn);
       const rotation  = App.pageData[pn]?.rotation || 0;
       const vp0       = pdfPage.getViewport({ scale: 1, rotation });
@@ -2295,13 +2591,18 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
     }
 
     if (doc) {
-      doc.save('plans-annotes.pdf');
+      const base = (App.pdfInfo?.fileName || 'plan').replace(/\.pdf$/i, '');
+      doc.save(`${base}-annote.pdf`);
       showToast('Export terminé ✓');
     }
+  } catch (err) {
+    console.error(err);
+    showError(`Export impossible : ${describeError(err)}. ` +
+              `Essayez une résolution plus basse si le plan est très grand.`);
   } finally {
+    clearProgress();
     tmpFc.dispose();
-    document.body.removeChild(tmpEl);
-    if (App.currentPage !== savedPage) await switchPage(savedPage);
+    tmpEl.remove();
   }
 }
 
@@ -2309,7 +2610,9 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
 // HISTORIQUE (UNDO)
 // ============================================================
 function saveHistoryState() {
+  if (!App.pageData[App.currentPage]) return;
   saveCurrentPageObjects();
+  markDirty();
   const snapshot = JSON.stringify({
     page:    App.currentPage,
     objects: App.pageData[App.currentPage].objects,
@@ -2337,14 +2640,12 @@ function undo() {
 function resetDrawState() {
   const fc = App.canvas;
   if (App.draw.tempObj)     { fc.remove(App.draw.tempObj); }
-  if (App.draw.previewLine) { fc.remove(App.draw.previewLine); }
-  if (App.draw.previewText) { fc.remove(App.draw.previewText); }
-  if (App.draw.closingLine) { fc.remove(App.draw.closingLine); }
   cleanupDimPreview();
   removeDimHandles();
   removePolyHandles();
-  // Supprimer les segments intermédiaires de polyline (non sélectionnables)
-  fc.getObjects('line').filter(o => !o.selectable).forEach(o => fc.remove(o));
+  // Supprimer tous les objets temporaires restants (previews, segments intermédiaires,
+  // marqueurs). Balisés par data.temp : les calques verrouillés ne sont plus touchés.
+  removeTempObjects();
 
   App.draw = {
     active: false, startPt: null, tempObj: null,
@@ -2435,6 +2736,33 @@ function initToolbar() {
       });
     }
     e.target.value = '';
+  });
+
+  // Glisser-déposer d'un PDF sur la zone de travail
+  const wrapper = document.getElementById('canvas-wrapper');
+  ['dragenter', 'dragover'].forEach(ev =>
+    wrapper.addEventListener(ev, (e) => {
+      if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+      e.preventDefault();
+      wrapper.classList.add('drag-over');
+    }));
+  wrapper.addEventListener('dragleave', (e) => {
+    if (e.target === wrapper) wrapper.classList.remove('drag-over');
+  });
+  wrapper.addEventListener('drop', (e) => {
+    wrapper.classList.remove('drag-over');
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;                       // sinon : drop de symbole, déjà géré
+    e.preventDefault();
+    if (/\.pdf$/i.test(f.name))                 loadPDF(f);
+    else if (/\.json$/i.test(f.name))           f.text().then(loadProject);
+    else showToast('Format non reconnu (PDF ou projet .json attendu)');
+  });
+
+  // Import d'un symbole personnalisé (le champ existait mais n'était ouvert par rien)
+  document.getElementById('btn-import-symbol')?.addEventListener('click', () => {
+    if (!requireDocument()) return;
+    document.getElementById('input-custom-svg').click();
   });
 
   // Export
@@ -2703,7 +3031,7 @@ function initSidebar() {
 
   // Calibration par échelle
   document.getElementById('btn-calib-scale').addEventListener('click', () => {
-    document.getElementById('modal-calib-scale').classList.add('open');
+    openModal('modal-calib-scale');
   });
 }
 
@@ -2726,7 +3054,7 @@ function applyToSelection(props) {
 function initModals() {
   // --- Modal calibration par segment ---
   document.getElementById('calib-cancel').addEventListener('click', () => {
-    document.getElementById('modal-calib').classList.remove('open');
+    closeModal(document.getElementById('modal-calib'));
     App._pendingCalibPixels = null;
   });
   document.getElementById('calib-confirm').addEventListener('click', () => {
@@ -2734,7 +3062,7 @@ function initModals() {
     const unit     = document.getElementById('calib-unit').value;
     if (!realDist || realDist <= 0) { showToast('Saisir une distance valide'); return; }
     const pixelsPerUnit = App._pendingCalibPixels / realDist;
-    document.getElementById('modal-calib').classList.remove('open');
+    closeModal(document.getElementById('modal-calib'));
     setPageCalibration(pixelsPerUnit, unit);
     App._pendingCalibPixels = null;
     // Revenir à l'outil select
@@ -2747,7 +3075,7 @@ function initModals() {
       e.target.value === 'custom' ? '' : 'none';
   });
   document.getElementById('scale-cancel').addEventListener('click', () => {
-    document.getElementById('modal-calib-scale').classList.remove('open');
+    closeModal(document.getElementById('modal-calib-scale'));
   });
   document.getElementById('scale-confirm').addEventListener('click', () => {
     const preset     = document.getElementById('scale-preset').value;
@@ -2772,32 +3100,37 @@ function initModals() {
     else if (unit === 'cm') pixelsPerUnit = 10   / realMmPerPx;
     else                    pixelsPerUnit = 1    / realMmPerPx;
 
-    document.getElementById('modal-calib-scale').classList.remove('open');
+    closeModal(document.getElementById('modal-calib-scale'));
     setPageCalibration(pixelsPerUnit, unit);
   });
 
   // --- Modal export ---
   document.getElementById('export-cancel').addEventListener('click', () => {
-    document.getElementById('modal-export').classList.remove('open');
+    closeModal(document.getElementById('modal-export'));
   });
   document.getElementById('export-confirm').addEventListener('click', () => {
     const checkboxes = document.querySelectorAll('#export-layers-list input[type=checkbox]:checked');
     const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
     const resolution  = document.getElementById('export-resolution').value;
     const format      = document.getElementById('export-format').value;
-    document.getElementById('modal-export').classList.remove('open');
+    const total       = document.querySelectorAll('#export-layers-list input[type=checkbox]').length;
+    if (total > 0 && selectedIds.length === 0 &&
+        !confirm('Aucun calque sélectionné : le PDF exporté ne contiendra aucune annotation.\n\nContinuer ?')) {
+      return;
+    }
+    closeModal(document.getElementById('modal-export'));
     exportPDF(selectedIds, resolution, format);
   });
 
   // --- Modal renommer calque ---
   document.getElementById('rename-layer-cancel').addEventListener('click', () => {
-    document.getElementById('modal-rename-layer').classList.remove('open');
+    closeModal(document.getElementById('modal-rename-layer'));
   });
   document.getElementById('rename-layer-confirm').addEventListener('click', () => {
     const id    = parseInt(document.getElementById('modal-rename-layer').dataset.layerId);
     const name  = document.getElementById('rename-layer-input').value.trim();
     if (name) renameLayer(id, name);
-    document.getElementById('modal-rename-layer').classList.remove('open');
+    closeModal(document.getElementById('modal-rename-layer'));
   });
   document.getElementById('rename-layer-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('rename-layer-confirm').click();
@@ -2806,21 +3139,39 @@ function initModals() {
   // Fermer les modales en cliquant le backdrop
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) backdrop.classList.remove('open');
+      if (e.target === backdrop) closeModal(backdrop);
     });
   });
+}
+
+// Fermeture d'une modale : annule aussi l'opération en attente le cas échéant
+function closeModal(modal) {
+  modal.classList.remove('open');
+  if (modal.id === 'modal-calib') App._pendingCalibPixels = null;
+  if (App._modalReturnFocus) { App._modalReturnFocus.focus?.(); App._modalReturnFocus = null; }
+}
+
+function openModal(id) {
+  App._modalReturnFocus = document.activeElement;
+  const modal = document.getElementById(id);
+  modal.classList.add('open');
+  // Focus sur le premier champ ou bouton utile
+  setTimeout(() => {
+    const first = modal.querySelector('input:not([type=hidden]), select, button.confirm');
+    first?.focus();
+    if (first?.select) first.select();
+  }, 30);
 }
 
 function openRenameLayerModal(id, currentName) {
   const modal = document.getElementById('modal-rename-layer');
   modal.dataset.layerId = id;
   document.getElementById('rename-layer-input').value = currentName;
-  modal.classList.add('open');
-  setTimeout(() => document.getElementById('rename-layer-input').select(), 50);
+  openModal('modal-rename-layer');
 }
 
 function openExportModal() {
-  if (!App.pdfDoc) { showToast('Aucun PDF chargé'); return; }
+  if (!requireDocument()) return;
   saveCurrentPageObjects();
 
   // Collecter tous les calques de toutes les pages (IDs uniques)
@@ -2854,7 +3205,7 @@ function openExportModal() {
       list.appendChild(item);
     });
   }
-  document.getElementById('modal-export').classList.add('open');
+  openModal('modal-export');
 }
 
 // ============================================================
@@ -2862,8 +3213,13 @@ function openExportModal() {
 // ============================================================
 function initKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
-    // Ne pas interférer si une modal est ouverte ou si on édite un texte
-    if (document.querySelector('.modal-backdrop.open')) return;
+    // Échap ferme la modale ouverte (avant toute autre logique : en v1.1 le
+    // gestionnaire sortait immédiatement et Échap ne fermait donc rien)
+    const openModal = document.querySelector('.modal-backdrop.open');
+    if (openModal) {
+      if (e.key === 'Escape') { e.preventDefault(); closeModal(openModal); }
+      return;
+    }
     if (document.activeElement?.tagName === 'INPUT'  ||
         document.activeElement?.tagName === 'TEXTAREA' ||
         document.activeElement?.isContentEditable) return;
@@ -2915,15 +3271,220 @@ function initKeyboardShortcuts() {
 }
 
 // ============================================================
+// SAUVEGARDE AUTOMATIQUE (IndexedDB) ET REPRISE
+// ------------------------------------------------------------
+// En v1.1, fermer l'onglet perdait tout le travail. On conserve ici
+// le projet ET le PDF source, pour une reprise sans re-sélection de fichier.
+// ============================================================
+const DB_NAME    = 'annoteur';
+const DB_STORE   = 'sessions';
+const AUTOSAVE_KEY   = 'last-session';
+const AUTOSAVE_DELAY = 2000;            // ms après la dernière modification
+const AUTOSAVE_MAX_PDF_BYTES = 200 * 1024 * 1024;
+
+let autosaveTimer = null;
+let autosaveDb    = null;
+
+function openDb() {
+  if (autosaveDb) return Promise.resolve(autosaveDb);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(DB_STORE)) req.result.createObjectStore(DB_STORE);
+    };
+    req.onsuccess = () => { autosaveDb = req.result; resolve(autosaveDb); };
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+function dbPut(key, value) {
+  return openDb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(value, key);
+    tx.oncomplete = resolve;
+    tx.onerror    = () => reject(tx.error);
+  }));
+}
+
+function dbGet(key) {
+  return openDb().then(db => new Promise((resolve, reject) => {
+    const tx  = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  }));
+}
+
+function dbDelete(key) {
+  return openDb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror    = () => reject(tx.error);
+  })).catch(() => {});
+}
+
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(doAutosave, AUTOSAVE_DELAY);
+}
+
+async function doAutosave() {
+  if (!App.pdfDoc) return;
+  try {
+    const record = {
+      savedAt: Date.now(),
+      project: buildProjectData(),
+      // Le PDF lui-même, pour que la reprise ne demande pas de re-sélectionner le fichier
+      pdfBlob: (App.pdfBlob && App.pdfBlob.size <= AUTOSAVE_MAX_PDF_BYTES) ? App.pdfBlob : null,
+      fileName: App.pdfInfo?.fileName || 'document.pdf',
+    };
+    await dbPut(AUTOSAVE_KEY, record);
+    setAutosaveStamp(record.savedAt);
+  } catch (err) {
+    // Quota dépassé ou mode privé : on retente sans le PDF avant d'abandonner
+    console.warn('Autosave échouée :', err);
+    try {
+      await dbPut(AUTOSAVE_KEY, {
+        savedAt: Date.now(), project: buildProjectData(),
+        pdfBlob: null, fileName: App.pdfInfo?.fileName || 'document.pdf',
+      });
+      setAutosaveStamp(Date.now());
+    } catch { setAutosaveStamp(null); }
+  }
+}
+
+function setAutosaveStamp(ts) {
+  const el = document.getElementById('autosave-state');
+  if (!el) return;
+  if (!ts) { el.textContent = '⚠️ sauvegarde auto indisponible'; el.title = ''; return; }
+  const t = new Date(ts);
+  el.textContent = `↻ ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+  el.title = `Sauvegarde automatique locale à ${t.toLocaleTimeString('fr-FR')}`;
+}
+
+async function initAutosave() {
+  // Garde-fou à la fermeture
+  window.addEventListener('beforeunload', (e) => {
+    if (!App.dirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  // Proposition de reprise
+  try {
+    const rec = await dbGet(AUTOSAVE_KEY);
+    if (!rec?.project) return;
+    const when = new Date(rec.savedAt).toLocaleString('fr-FR');
+    const pages = Object.values(rec.project.pages || {})
+      .reduce((n, p) => n + (p.objects?.length || 0), 0);
+    if (pages === 0) { await dbDelete(AUTOSAVE_KEY); return; }
+
+    offerRecovery(rec, when, pages);
+  } catch (err) {
+    console.warn('Reprise indisponible :', err);
+  }
+}
+
+function offerRecovery(rec, when, pages) {
+  const bar = document.getElementById('recovery-bar');
+  if (!bar) return;
+  document.getElementById('recovery-text').textContent =
+    `Session non sauvegardée du ${when} — ${rec.fileName}, ${pages} annotation(s).`;
+  bar.style.display = 'flex';
+
+  document.getElementById('recovery-restore').onclick = async () => {
+    bar.style.display = 'none';
+    try {
+      if (rec.pdfBlob) {
+        setProgress('Reprise de la session…');
+        await loadPDF(new File([rec.pdfBlob], rec.fileName, { type: 'application/pdf' }));
+        await loadProject(JSON.stringify(rec.project));
+        App.dirty = true;
+        updateDocumentState();
+        showToast('Session restaurée ✓');
+      } else {
+        // Le PDF n'a pas pu être stocké (trop volumineux) : on garde le projet
+        App._pendingRecovery = rec.project;
+        showToast('Ouvrez le PDF d’origine : les annotations seront réappliquées.');
+      }
+    } catch (err) {
+      console.error(err);
+      showError(`Reprise impossible : ${describeError(err)}`);
+    } finally {
+      clearProgress();
+    }
+  };
+
+  document.getElementById('recovery-discard').onclick = async () => {
+    bar.style.display = 'none';
+    await dbDelete(AUTOSAVE_KEY);
+  };
+}
+
+// Met à jour l'en-tête : nom du document, état modifié, activation des outils
+function updateDocumentState() {
+  const hasDoc = !!App.pdfDoc;
+
+  const nameEl = document.getElementById('doc-name');
+  if (nameEl) {
+    nameEl.textContent = hasDoc ? App.pdfInfo?.fileName || '' : 'Aucun document';
+    nameEl.title = nameEl.textContent;
+  }
+
+  const dirtyEl = document.getElementById('doc-dirty');
+  if (dirtyEl) dirtyEl.style.display = (hasDoc && App.dirty) ? '' : 'none';
+
+  document.body.classList.toggle('no-document', !hasDoc);
+  document.querySelectorAll('[data-needs-doc]').forEach(el => { el.disabled = !hasDoc; });
+}
+
+// ============================================================
 // UTILITAIRES UI
 // ============================================================
 let toastTimer = null;
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.classList.add('show');
+  el.className = 'show';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// Une erreur ne doit PAS disparaître au bout de 2,5 s comme une info.
+function showError(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show error';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 12000);
+  console.error(msg);
+}
+
+// Message technique lisible à partir d'une exception
+function describeError(err) {
+  if (!err) return 'erreur inconnue';
+  const name = err.name || '';
+  if (name === 'PasswordException')      return 'le document est protégé par mot de passe';
+  if (name === 'InvalidPDFException')    return 'le fichier est corrompu ou n’est pas un PDF';
+  if (name === 'MissingPDFException')    return 'le fichier est introuvable';
+  if (name === 'QuotaExceededError')     return 'espace de stockage local insuffisant';
+  if (name === 'RangeError' || /canvas/i.test(err.message || ''))
+    return 'taille de canvas dépassée (plan trop grand pour cette résolution)';
+  return err.message || String(err);
+}
+
+// Indicateur de progression PERSISTANT (le toast disparaissait au bout de 2,5 s
+// alors que le traitement durait encore plusieurs minutes)
+function setProgress(msg) {
+  const el = document.getElementById('progress');
+  if (!el) return;
+  el.querySelector('.progress-text').textContent = msg;
+  el.style.display = 'flex';
+}
+function clearProgress() {
+  const el = document.getElementById('progress');
+  if (el) el.style.display = 'none';
 }
 
 function showIndicator(id) {
