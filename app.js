@@ -2,8 +2,8 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.2.0';   // Lot 1 — Fiabilité
-const PROJECT_FORMAT = '1.1';   // version du format de fichier projet
+const APP_VERSION  = '1.3.0';   // Lot 2 — Fondation : repère en points PDF
+const PROJECT_FORMAT = '2.0';   // coordonnées en points PDF (v1.x : pixels écran)
 
 // === Configuration PDF.js ===
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -24,7 +24,7 @@ const App = {
   // Suivi des modifications non sauvegardées
   dirty:        false,
 
-  // Données par page : rotation, calibration, objets sérialisés, renderScale
+  // Données par page : rotation, calibration, objets sérialisés (en points PDF)
   pageData: {},
 
   // Calques
@@ -198,6 +198,7 @@ function initCanvas() {
     zoom = Math.max(0.05, Math.min(20, zoom));
     fc.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
     updateZoomDisplay();
+    scheduleBackgroundRefresh();
     opt.e.preventDefault();
     opt.e.stopPropagation();
   });
@@ -275,12 +276,19 @@ function initCanvas() {
   container.addEventListener('dragover', (e) => { e.preventDefault(); });
   container.addEventListener('drop',     handleSymbolDrop);
 
-  // Redimensionner le canvas si la fenêtre change
+  // Redimensionner le canvas quand la fenêtre change.
+  // En v1.1 ce gestionnaire ne faisait rien dès qu'un PDF était chargé : le
+  // canvas gardait son ancienne taille et le repère des annotations dérivait.
+  // Maintenant le repère est indépendant de la fenêtre, on peut simplement
+  // redimensionner et ré-ajuster la vue.
+  let resizeTimer = null;
   window.addEventListener('resize', () => {
-    if (!App.pdfDoc) {
-      fc.setWidth(wrapper.clientWidth);
-      fc.setHeight(wrapper.clientHeight);
-    }
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      fc.setWidth(wrapper.clientWidth   || 800);
+      fc.setHeight(wrapper.clientHeight || 600);
+      if (App.pdfDoc) fitToWindow(); else fc.requestRenderAll();
+    }, 120);
   });
 }
 
@@ -519,6 +527,9 @@ function baseProps(extra = {}) {
     strokeWidth:     tp.strokeWidth,
     strokeDashArray: tp.dashArray,
     opacity:         tp.opacity,
+    // L'épaisseur du trait est une grandeur physique (en points, ≈ 0,35 mm/pt) :
+    // redimensionner une forme ne doit pas épaissir son contour.
+    strokeUniform:   true,
     selectable:      false,
     evented:         false,
     data: {
@@ -915,7 +926,7 @@ function toolCalibrate_down(pt) {
     App.draw.startPt = null;
 
     // Afficher la modale de saisie
-    document.getElementById('calib-px-dist').textContent = Math.round(pixelDist);
+    document.getElementById('calib-px-dist').textContent = pixelDist.toFixed(1);
     document.getElementById('calib-real-dist').value     = '';
     openModal('modal-calib');
 
@@ -937,7 +948,7 @@ function getObjPxSize(obj) {
 function pxToDisplay(px) {
   const calib = getPageCalibration();
   if (!calib) return { val: Math.round(px), unit: 'px' };
-  return { val: parseFloat((px / calib.pixelsPerUnit).toFixed(2)), unit: calib.unit };
+  return { val: parseFloat((px / calib.pointsPerUnit).toFixed(2)), unit: calib.unit };
 }
 
 // Convertit une valeur en unité calibrée → pixels canvas
@@ -945,7 +956,7 @@ function displayToPx(val, unit) {
   const calib = getPageCalibration();
   if (!calib) return parseFloat(val);
   // val est dans calib.unit ; convertir si nécessaire (ici même unité car le champ affiche calib.unit)
-  return parseFloat(val) * calib.pixelsPerUnit;
+  return parseFloat(val) * calib.pointsPerUnit;
 }
 
 // Met à jour les champs L/H du header selon l'objet sélectionné
@@ -999,42 +1010,6 @@ function applyDimChange() {
 // ============================================================
 // GÉOMÉTRIE DES COTES
 // ============================================================
-
-// Calcule toute la géométrie d'une ligne de cote à partir de p1, p2 et d'un point d'écartement
-function computeDimGeometry(p1, p2, offsetPt) {
-  const dx  = p2.x - p1.x;
-  const dy  = p2.y - p1.y;
-  const len = Math.hypot(dx, dy) || 1;
-
-  // Vecteur perpendiculaire normalisé (sens trigonométrique)
-  const nx = -dy / len;
-  const ny =  dx / len;
-
-  // Distance signée de offsetPt à la droite p1-p2 (projection sur la perpendiculaire)
-  const offset = (offsetPt.x - p1.x) * nx + (offsetPt.y - p1.y) * ny;
-
-  // Points de la ligne de cote (parallèle à p1-p2, décalée de offset)
-  const c1 = { x: p1.x + nx * offset, y: p1.y + ny * offset };
-  const c2 = { x: p2.x + nx * offset, y: p2.y + ny * offset };
-
-  // Sens du dépassement des lignes de rappel (même côté que l'offset)
-  const sign      = offset >= 0 ? 1 : -1;
-  const gap       = 3;  // espace entre le point mesuré et le début de la ligne de rappel
-  const overshoot = 6;  // dépassement au-delà de la ligne de cote
-
-  const e1s = { x: p1.x + nx * gap  * sign, y: p1.y + ny * gap  * sign };
-  const e1e = { x: c1.x + nx * overshoot * sign, y: c1.y + ny * overshoot * sign };
-  const e2s = { x: p2.x + nx * gap  * sign, y: p2.y + ny * gap  * sign };
-  const e2e = { x: c2.x + nx * overshoot * sign, y: c2.y + ny * overshoot * sign };
-
-  // Milieu de la ligne de cote (pour le texte)
-  const mid = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
-
-  // Angle de la ligne de cote (en degrés, pour la rotation du texte)
-  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-
-  return { c1, c2, e1s, e1e, e2s, e2e, mid, angle, offset, nx, ny, len };
-}
 
 // Crée les objets Fabric filigrane (preview) pour la cote en cours de tracé
 // La mesure réelle s'affiche dès l'étape 2 (offset en cours)
@@ -1334,52 +1309,9 @@ function cleanupDimPreview() {
   if (App.draw.dimDot2) { fc.remove(App.draw.dimDot2); App.draw.dimDot2 = null; }
 }
 
-// Normalise un vecteur 2D
-function normV(v) {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-}
-
 // ============================================================
 // NUAGE DE RÉVISION
 // ============================================================
-
-// Génère le chemin SVG d'un nuage de révision rectangulaire
-// Les arcs bombent vers l'extérieur (sweep=0 sur un tracé CW)
-function makeRevisionCloudPath(x1, y1, x2, y2) {
-  const w = x2 - x1, h = y2 - y1;
-  if (w < 2 || h < 2) return `M ${x1} ${y1} Z`;
-
-  // Rayon des arcs : ~1/20ème du périmètre, entre 8 et 30 px
-  const perimeter = 2 * (w + h);
-  const arcR      = Math.max(8, Math.min(30, perimeter / 20));
-
-  // Parcourir les 4 côtés dans le sens horaire
-  const sides = [
-    [x1, y1, x2, y1],  // haut
-    [x2, y1, x2, y2],  // droite
-    [x2, y2, x1, y2],  // bas
-    [x1, y2, x1, y1],  // gauche
-  ];
-
-  let d = '';
-  let first = true;
-
-  for (const [ax, ay, bx, by] of sides) {
-    const len = Math.hypot(bx - ax, by - ay);
-    // Nombre d'arcs sur ce côté
-    const n   = Math.max(1, Math.round(len / (arcR * 2)));
-    for (let j = 0; j < n; j++) {
-      const t0 = j / n, t1 = (j + 1) / n;
-      const px0 = ax + (bx - ax) * t0, py0 = ay + (by - ay) * t0;
-      const px1 = ax + (bx - ax) * t1, py1 = ay + (by - ay) * t1;
-      if (first) { d += `M ${px0.toFixed(1)} ${py0.toFixed(1)} `; first = false; }
-      // sweep=1 → arc CW → bombe vers l'extérieur sur un chemin CW (convexe)
-      d += `A ${arcR.toFixed(1)} ${arcR.toFixed(1)} 0 0 1 ${px1.toFixed(1)} ${py1.toFixed(1)} `;
-    }
-  }
-  return d + 'Z';
-}
 
 function toolCloud_down(pt) {
   App.draw.active  = true;
@@ -1457,7 +1389,7 @@ function buildDimGroupOnCanvas(p1, p2, geo, layerId) {
     hasRotatingPoint: false,
     data: {
       type: 'dimension', layerId: layerId || App.activeLayerId, pageNum: App.currentPage,
-      pixelLength: pixDist,
+      pointLength: pixDist,
       p1: { ...p1 }, p2: { ...p2 }, offsetPt: { ...offsetPt },
       _lastCenter: null,
     },
@@ -1481,80 +1413,13 @@ function createOffsetDimension(p1, p2, geo) {
 // ============================================================
 // COTES / DIMENSIONS (ancienne API conservée pour updateAllDimensionLabels)
 // ============================================================
-function createDimensionObject(p1, p2) {
-  const calib     = getPageCalibration();
-  const pixelDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-  const label     = formatDimension(pixelDist, calib);
-  const angle     = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
-  const mx        = (p1.x + p2.x) / 2;
-  const my        = (p1.y + p2.y) / 2;
-
-  // Ligne principale
-  const line = new fabric.Line([p1.x, p1.y, p2.x, p2.y], {
-    stroke: App.toolProps.strokeColor,
-    strokeWidth: App.toolProps.strokeWidth,
-    selectable: false, evented: false,
-  });
-
-  // Petits terminaux perpendiculaires
-  const len  = 8;
-  const perp = angle + 90;
-  const pr   = perp * Math.PI / 180;
-  const tick1 = new fabric.Line(
-    [p1.x - Math.cos(pr)*len/2, p1.y - Math.sin(pr)*len/2, p1.x + Math.cos(pr)*len/2, p1.y + Math.sin(pr)*len/2],
-    { stroke: App.toolProps.strokeColor, strokeWidth: App.toolProps.strokeWidth, selectable: false, evented: false }
-  );
-  const tick2 = new fabric.Line(
-    [p2.x - Math.cos(pr)*len/2, p2.y - Math.sin(pr)*len/2, p2.x + Math.cos(pr)*len/2, p2.y + Math.sin(pr)*len/2],
-    { stroke: App.toolProps.strokeColor, strokeWidth: App.toolProps.strokeWidth, selectable: false, evented: false }
-  );
-
-  // Étiquette de cote
-  const textAngle = (angle > 90 || angle < -90) ? angle + 180 : angle;
-  const text = new fabric.Text(label, {
-    left: mx, top: my,
-    fontSize: 12,
-    fill: App.toolProps.strokeColor,
-    originX: 'center', originY: 'bottom',
-    angle: textAngle,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    padding: 2,
-    selectable: false, evented: false,
-  });
-
-  // Regrouper tous les éléments
-  const group = new fabric.Group([line, tick1, tick2, text], {
-    selectable: true, evented: true,
-    data: {
-      type:        'dimension',
-      layerId:     App.activeLayerId,
-      pageNum:     App.currentPage,
-      pixelLength: pixelDist,
-      p1: { x: p1.x, y: p1.y },
-      p2: { x: p2.x, y: p2.y },
-    },
-  });
-
-  App.canvas.add(group);
-  applyLayerPropsToObj(group);
-  App.canvas.setActiveObject(group);
-  App.canvas.requestRenderAll();
-  saveHistoryState();
-}
-
-function formatDimension(pixelLength, calib) {
-  if (!calib || !calib.pixelsPerUnit) return `${Math.round(pixelLength)} px`;
-  const realVal = pixelLength / calib.pixelsPerUnit;
-  return `${realVal.toFixed(2)} ${calib.unit}`;
-}
-
 // Met à jour toutes les cotes de la page courante après recalibration
 function updateAllDimensionLabels() {
   const calib = getPageCalibration();
   App.canvas.getObjects('group').forEach(group => {
     if (group.data?.type !== 'dimension') return;
     if (group.data?.pageNum !== App.currentPage) return;
-    const newLabel = formatDimension(group.data.pixelLength, calib);
+    const newLabel = formatDimension(group.data.pointLength ?? group.data.pixelLength, calib);
     const textObj  = group._objects?.find(o => o.type === 'text');
     if (textObj) {
       textObj.set('text', newLabel);
@@ -1571,12 +1436,33 @@ function getPageCalibration() {
   return App.pageData[App.currentPage]?.calibration || null;
 }
 
-function setPageCalibration(pixelsPerUnit, unit) {
+function setPageCalibration(pointsPerUnit, unit) {
   if (!App.pageData[App.currentPage]) return;
-  App.pageData[App.currentPage].calibration = { pixelsPerUnit, unit };
+  if (!(pointsPerUnit > 0) || !Number.isFinite(pointsPerUnit)) {
+    showError('Calibration invalide.'); return;
+  }
+  App.pageData[App.currentPage].calibration = { pointsPerUnit, unit };
   updateCalibrationUI();
   updateAllDimensionLabels();
-  showToast(`Calibration appliquée : 1 ${unit} = ${(1/pixelsPerUnit).toFixed(2)} px⁻¹`);
+  markDirty();
+  const ech = pointsPerUnitToScale(pointsPerUnit, unit);
+  showToast(`Calibration : 1 ${unit} = ${pointsPerUnit.toFixed(2)} pt` +
+            (ech ? ` (échelle ≈ 1:${Math.round(ech)})` : ''));
+}
+
+// Propage la calibration de la page courante à toutes les pages du document.
+// Possible uniquement depuis que la calibration est en points : elle ne dépend
+// plus de l'échelle d'affichage propre à chaque page.
+function applyCalibrationToAllPages() {
+  const calib = getPageCalibration();
+  if (!calib) return;
+  let n = 0;
+  for (let p = 1; p <= App.totalPages; p++) {
+    if (p === App.currentPage || !App.pageData[p]) continue;
+    App.pageData[p].calibration = { ...calib };
+    n++;
+  }
+  if (n) { markDirty(); showToast(`Échelle appliquée à ${n} autre(s) page(s)`); }
 }
 
 function updateCalibrationUI() {
@@ -1586,12 +1472,13 @@ function updateCalibrationUI() {
   if (pageNumEl) pageNumEl.textContent = App.currentPage;
   if (!statusEl) return;
   if (calib) {
-    const ppu = calib.pixelsPerUnit;
+    const ech = pointsPerUnitToScale(calib.pointsPerUnit, calib.unit);
     statusEl.className = 'calibration-info calibrated';
-    statusEl.textContent = `✓ 1 ${calib.unit} = ${ppu.toFixed(2)} px`;
+    statusEl.textContent = `✓ 1 ${calib.unit} = ${calib.pointsPerUnit.toFixed(2)} pt` +
+                           (ech ? `  —  échelle ≈ 1:${Math.round(ech)}` : '');
   } else {
     statusEl.className = 'calibration-info';
-    statusEl.textContent = 'Non calibrée — utilisez 🎯 ou saisissez une échelle';
+    statusEl.textContent = 'Non calibrée — mesures en points (🎯 ou saisir une échelle)';
   }
 }
 
@@ -1632,9 +1519,8 @@ async function loadPDF(file) {
     for (let i = 1; i <= App.totalPages; i++) {
       App.pageData[i] = {
         rotation:    0,
-        calibration: null,
-        objects:     [],       // objets Fabric sérialisés
-        renderScale: 1,
+        calibration: null,   // { pointsPerUnit, unit }
+        objects:     [],     // objets Fabric sérialisés, en points PDF
       };
     }
 
@@ -1644,6 +1530,7 @@ async function loadPDF(file) {
     // des N vignettes gelait l'application plusieurs minutes avant tout affichage.
     setProgress('Rendu de la page 1…');
     await switchPage(1);
+    applyPageDefaults();
 
     buildThumbnailStrip();          // squelettes immédiats
     startLazyThumbnails();          // rendus à la demande, 1 à la fois
@@ -1667,6 +1554,23 @@ async function loadPDF(file) {
     clearProgress();
     showError(`Impossible d'ouvrir ce PDF : ${describeError(err)}`);
   }
+}
+
+// Adapte les valeurs par défaut (épaisseur de trait, corps de texte) au format
+// du plan. Ces grandeurs sont maintenant PHYSIQUES (en points) : 2 pt ≈ 0,7 mm
+// convient à une feuille A4, mais serait invisible sur un A0.
+function applyPageDefaults() {
+  const pd = App.pageData[1];
+  if (!pd?.pageW) return;
+  const ref = Math.max(pd.pageW, pd.pageH);          // plus grand côté, en points
+
+  App.toolProps.strokeWidth = Math.max(1, Math.round(ref / 400 * 2) / 2);  // pas de 0,5 pt
+  App.toolProps.fontSize    = Math.max(10, Math.round(ref / 60));
+
+  const sw = document.getElementById('prop-stroke-width');
+  const fs = document.getElementById('prop-font-size');
+  if (sw) sw.value = App.toolProps.strokeWidth;
+  if (fs) fs.value = App.toolProps.fontSize;
 }
 
 // Remet à zéro tout l'état lié au document (appelé avant chaque ouverture)
@@ -1841,69 +1745,186 @@ async function switchPage(pageNum) {
   loadPageObjects();
 }
 
+// ============================================================
+// REPÈRE DE COORDONNÉES (v2.0)
+// ------------------------------------------------------------
+// L'espace objet du canvas Fabric EST l'espace de la page PDF, en points
+// (origine = coin haut-gauche de la page, 1 unité = 1 pt = 0,3528 mm).
+//
+// La v1.1 stockait les annotations en pixels écran, dans un repère
+// recalculé à chaque rendu depuis la taille de la fenêtre : rouvrir un
+// projet sur un autre écran décalait tout, et la calibration devenait
+// fausse. Désormais l'adaptation à la fenêtre passe UNIQUEMENT par le
+// viewportTransform de Fabric (zoom/pan), qui ne touche pas aux objets.
+//
+// La netteté du plan est découplée du repère : le fond est rendu par
+// pdf.js à `bgScale` (≈ zoom × densité écran) puis affiché avec un
+// facteur 1/bgScale. Zoomer re-rend donc le plan au lieu d'agrandir
+// une image — la v1.1 étirait un JPEG et devenait illisible.
+// ============================================================
+
+const BG_MAX_SCALE   = 4;      // plafond de résolution du fond
+const BG_MIN_SCALE   = 0.25;
+const BG_REFRESH_MS  = 250;    // anti-rebond après un zoom
+const BG_RESCALE_TOL = 0.25;   // écart relatif à partir duquel on re-rend
+
+let bgRefreshTimer = null;
+let bgRenderTask   = null;     // RenderTask pdf.js en cours (annulable)
+let bgCurrentScale = 0;
+
+// Résolution de rendu souhaitée pour le fond au zoom courant
+function targetBackgroundScale() {
+  const zoom = App.canvas ? App.canvas.getZoom() : 1;
+  const dpr  = window.devicePixelRatio || 1;
+  return Math.min(BG_MAX_SCALE, Math.max(BG_MIN_SCALE, zoom * dpr));
+}
+
 // Rend la page courante dans le canvas Fabric
 async function renderCurrentPage() {
   const fc      = App.canvas;
   const wrapper = document.getElementById('canvas-wrapper');
-  const page    = await App.pdfDoc.getPage(App.currentPage);
-  const rotation = App.pageData[App.currentPage]?.rotation || 0;
+  const pd      = App.pageData[App.currentPage];
+  if (!pd) return;
 
-  const containerW = wrapper.clientWidth  || 800;
-  const containerH = wrapper.clientHeight || 600;
+  const page     = await App.pdfDoc.getPage(App.currentPage);
+  const rotation = pd.rotation || 0;
 
-  const vp0     = page.getViewport({ scale: 1, rotation });
-  const scale   = Math.min(containerW / vp0.width, containerH / vp0.height) * 0.92;
-  const vp      = page.getViewport({ scale, rotation });
+  // Dimensions de la page EN POINTS — c'est l'espace objet
+  const vp1 = page.getViewport({ scale: 1, rotation });
+  pd.pageW = vp1.width;
+  pd.pageH = vp1.height;
 
-  App.pageData[App.currentPage].renderScale  = scale;
-  App.pageData[App.currentPage].pageW        = vp.width;
-  App.pageData[App.currentPage].pageH        = vp.height;
+  fc.setWidth(wrapper.clientWidth   || 800);
+  fc.setHeight(wrapper.clientHeight || 600);
 
-  // Rendre dans un canvas off-screen
-  const offCanvas     = document.createElement('canvas');
-  offCanvas.width     = vp.width;
-  offCanvas.height    = vp.height;
-  await page.render({ canvasContext: offCanvas.getContext('2d'), viewport: vp }).promise;
+  fitToWindow();                       // définit le zoom/pan initial
+  await refreshBackground(true);       // puis le fond à la bonne résolution
+}
 
-  // Redimensionner le canvas Fabric à la taille du container
-  fc.setWidth(containerW);
-  fc.setHeight(containerH);
+// (Re)construit l'image de fond à la résolution adaptée au zoom courant.
+// `force` ignore le seuil de tolérance (changement de page, rotation…).
+async function refreshBackground(force = false) {
+  const fc = App.canvas;
+  const pd = App.pageData[App.currentPage];
+  if (!App.pdfDoc || !pd) return;
 
-  // Centrer dans le container via transform
-  const tx = (containerW - vp.width)  / 2;
-  const ty = (containerH - vp.height) / 2;
+  const target = targetBackgroundScale();
+  if (!force && bgCurrentScale > 0 &&
+      Math.abs(target - bgCurrentScale) / bgCurrentScale < BG_RESCALE_TOL) return;
 
-  // Sauvegarder l'offset pour l'export (les annotations sont en coordonnées canvas, pas page)
-  App.pageData[App.currentPage].canvasOffsetX = tx;
-  App.pageData[App.currentPage].canvasOffsetY = ty;
+  // Annuler un rendu encore en cours (zooms successifs rapides)
+  if (bgRenderTask) { try { bgRenderTask.cancel(); } catch {} bgRenderTask = null; }
 
-  // Fond PDF : image construite DIRECTEMENT depuis le canvas hors-écran.
-  // La v1.1 passait par offCanvas.toDataURL('image/jpeg', 0.9) :
-  //  - recompression JPEG d'un plan au trait (artefacts sur les lignes fines),
-  //  - data-URL de plusieurs Mo maintenue en mémoire,
-  //  - et surtout un chargement d'<img> asynchrone qui, en cas d'échec,
-  //    n'appelait jamais le callback → application figée sans message.
-  const bg = new fabric.Image(offCanvas, {
-    left: tx, top: ty,
-    originX: 'left', originY: 'top',
-    scaleX: 1, scaleY: 1,
-    selectable: false, evented: false,
-  });
-  fc.setBackgroundImage(bg, () => {});   // objet Fabric → appel synchrone
+  const pageNum = App.currentPage;
+  try {
+    const page = await App.pdfDoc.getPage(pageNum);
+    const vp   = page.getViewport({ scale: target, rotation: pd.rotation || 0 });
 
-  // Réinitialiser le viewport transform (supprime zoom/pan précédents)
-  fc.setViewportTransform([1, 0, 0, 1, 0, 0]);
-  updateZoomDisplay();
-  fc.requestRenderAll();
+    const off  = document.createElement('canvas');
+    off.width  = Math.max(1, Math.round(vp.width));
+    off.height = Math.max(1, Math.round(vp.height));
+
+    bgRenderTask = page.render({ canvasContext: off.getContext('2d'), viewport: vp });
+    await bgRenderTask.promise;
+    bgRenderTask = null;
+
+    if (pageNum !== App.currentPage) return;   // l'utilisateur a changé de page
+
+    // L'image couvre exactement [0, pageW] × [0, pageH] en points
+    const bg = new fabric.Image(off, {
+      left: 0, top: 0,
+      originX: 'left', originY: 'top',
+      scaleX: pd.pageW / off.width,
+      scaleY: pd.pageH / off.height,
+      selectable: false, evented: false,
+      objectCaching: false,
+    });
+    fc.setBackgroundImage(bg, () => {});   // objet Fabric → synchrone
+    bgCurrentScale = target;
+    fc.requestRenderAll();
+  } catch (err) {
+    bgRenderTask = null;
+    if (err?.name === 'RenderingCancelledException') return;
+    console.error(err);
+    showError(`Rendu de la page ${pageNum} impossible : ${describeError(err)}`);
+  }
+}
+
+// À appeler après tout changement de zoom
+function scheduleBackgroundRefresh() {
+  clearTimeout(bgRefreshTimer);
+  bgRefreshTimer = setTimeout(() => refreshBackground(false), BG_REFRESH_MS);
 }
 
 // Rotation d'une page (cumul 90°)
+// Rotation d'une page de 90° horaire.
+// Les annotations tournent AVEC le plan : en v1.1 le fond tournait et les
+// annotations restaient en place, ce qui les désolidarisait du dessin.
 async function rotatePage(pageNum) {
-  if (!App.pdfDoc || !App.pageData[pageNum]) return;
-  App.pageData[pageNum].rotation = ((App.pageData[pageNum].rotation || 0) + 90) % 360;
+  const pd = App.pageData[pageNum];
+  if (!App.pdfDoc || !pd) return;
+
+  // Hauteur de la page AVANT rotation, en points : c'est elle qui définit
+  // la transformation (x, y) → (pageH − y, x).
+  const page = await App.pdfDoc.getPage(pageNum);
+  const vpBefore = page.getViewport({ scale: 1, rotation: pd.rotation || 0 });
+  const pageH = vpBefore.height;
+
+  if (pageNum === App.currentPage) {
+    resetDrawState();
+    rotateCanvasObjects90(pageH);
+    saveCurrentPageObjects();
+  } else {
+    pd.objects = (pd.objects || []).map(o => rotateSerializedObject90(o, pageH));
+  }
+
+  pd.rotation = ((pd.rotation || 0) + 90) % 360;
+
   await refreshThumbnail(pageNum);
   if (pageNum === App.currentPage) await renderCurrentPage();
   markDirty();
+  saveHistoryState();
+}
+
+// Fait tourner de 90° tous les objets vivants du canvas
+function rotateCanvasObjects90(pageH) {
+  const fc = App.canvas;
+  fc.discardActiveObject();
+  fc.getObjects().forEach(obj => {
+    if (isTempObject(obj)) return;
+    const c  = obj.getCenterPoint();
+    const nc = rotatePoint90({ x: c.x, y: c.y }, pageH);
+    obj.set('angle', normalizeAngle((obj.angle || 0) + 90));
+    obj.setPositionByOrigin(new fabric.Point(nc.x, nc.y), 'center', 'center');
+    if (obj.data) rotateDimData90(obj.data, pageH);
+    obj.setCoords();
+  });
+  fc.requestRenderAll();
+}
+
+// Les cotes portent leurs points de mesure en coordonnées absolues
+function rotateDimData90(data, pageH) {
+  for (const key of ['p1', 'p2', 'offsetPt']) {
+    if (data[key] && typeof data[key].x === 'number') data[key] = rotatePoint90(data[key], pageH);
+  }
+  if (data._lastCenter) data._lastCenter = null;
+}
+
+// Même rotation, appliquée à un objet sérialisé (page non affichée).
+// On n'a pas le centre exact sans Fabric : on utilise la boîte left/top,
+// suffisant car ces objets sont ré-hydratés puis recalés au chargement.
+function rotateSerializedObject90(obj, pageH) {
+  const o = { ...obj };
+  const w = (o.width  || 0) * (o.scaleX || 1);
+  const h = (o.height || 0) * (o.scaleY || 1);
+  const center = { x: (o.left || 0) + w / 2, y: (o.top || 0) + h / 2 };
+  const nc = rotatePoint90(center, pageH);
+  // Après rotation, largeur et hauteur apparentes s'échangent
+  o.left  = nc.x - h / 2;
+  o.top   = nc.y - w / 2;
+  o.angle = normalizeAngle((o.angle || 0) + 90);
+  if (o.data) { o.data = { ...o.data }; rotateDimData90(o.data, pageH); }
+  return o;
 }
 
 // ============================================================
@@ -1941,10 +1962,6 @@ function loadPageObjects() {
 // GESTION DES CALQUES
 // ============================================================
 const LAYER_COLORS = ['#e05c5c','#f0a030','#50c060','#50b8e0','#a060e0','#e060a0','#80c040','#40a0c0'];
-
-function addDefaultLayer() {
-  addLayer('Calque 1');
-}
 
 function addLayer(name) {
   const id = App.nextLayerId++;
@@ -2216,9 +2233,9 @@ function getSymbolTargetPxSize(sym) {
   const calib = getPageCalibration();
   if (calib && sym.realW_cm != null) {
     let pixelsPerCm;
-    if      (calib.unit === 'm')  pixelsPerCm = calib.pixelsPerUnit / 100;
-    else if (calib.unit === 'cm') pixelsPerCm = calib.pixelsPerUnit;
-    else                          pixelsPerCm = calib.pixelsPerUnit / 10; // mm
+    if      (calib.unit === 'm')  pixelsPerCm = calib.pointsPerUnit / 100;
+    else if (calib.unit === 'cm') pixelsPerCm = calib.pointsPerUnit;
+    else                          pixelsPerCm = calib.pointsPerUnit * 10; // mm → cm
     return { w: sym.realW_cm * pixelsPerCm, h: sym.realH_cm * pixelsPerCm };
   }
   return { w: sym.defaultW, h: sym.defaultH };
@@ -2425,6 +2442,19 @@ async function loadProject(jsonStr) {
   }
   if (!checkProjectMatchesPdf(data)) return;
 
+  // Migration du repère : les projets v1.0/v1.1 stockaient les annotations en
+  // pixels écran. La conversion utilise le renderScale et l'offset propres à
+  // CHAQUE page (un même projet pouvait en contenir plusieurs).
+  let notes = [];
+  try {
+    const migrated = migrateProject(data);
+    data  = migrated.data;
+    notes = migrated.notes;
+  } catch (err) {
+    showError(`Projet non convertible : ${describeError(err)}`);
+    return;
+  }
+
   try {
     App.nextLayerId = data.nextLayerId || 1;
 
@@ -2453,7 +2483,13 @@ async function loadProject(jsonStr) {
     updateCalibrationUI();
     App.dirty = false;
     updateDocumentState();
-    showToast('Projet chargé ✓');
+    if (notes.length) {
+      showToast('Projet converti au nouveau format ✓');
+      console.info('Migration du projet :\n- ' + notes.join('\n- '));
+      setTimeout(() => showToast(notes[0]), 2600);
+    } else {
+      showToast('Projet chargé ✓');
+    }
   } catch (err) {
     console.error(err);
     showError(`Chargement du projet impossible : ${describeError(err)}`);
@@ -2488,9 +2524,11 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
   document.body.appendChild(tmpEl);
   const tmpFc = new fabric.Canvas('__export_tmp__', { enableRetinaScaling: false });
 
-  // 150 DPI pour la mise à l'échelle des formats papier
+  // Résolution pixel des formats papier (l'image rastérisée), puis conversion
+  // des dimensions de page en points pour jsPDF.
   const PRINT_DPI = 150;
   const MM_TO_PX  = PRINT_DPI / 25.4;
+  const MM_TO_PT  = 72 / 25.4;
 
   let doc = null;
 
@@ -2501,9 +2539,11 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
       const rotation  = App.pageData[pn]?.rotation || 0;
       const vp0       = pdfPage.getViewport({ scale: 1, rotation });
 
-      // Résolution d'export = renderScale × dpiMult
-      const renderScale = App.pageData[pn]?.renderScale || 1;
-      const exportScale = renderScale * dpiMult;
+      // Résolution d'export : les objets sont en points PDF, on rend donc la
+      // page à `dpiMult` × 72 dpi et on applique le MÊME facteur aux annotations.
+      // La v1.1 multipliait par le renderScale de l'affichage : une page jamais
+      // ouverte s'exportait à une échelle arbitraire.
+      const exportScale = dpiMult;
       const vp          = pdfPage.getViewport({ scale: exportScale, rotation });
       const W = Math.round(vp.width);
       const H = Math.round(vp.height);
@@ -2533,12 +2573,9 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
         });
       }
 
-      // Transformer : soustraire l'offset de centrage UI, passer à l'échelle export
-      // Les objets ont été placés en coords canvas (origin = coin haut-gauche du container,
-      // pas de la page PDF). L'offset (tx, ty) est le décalage de centrage de la page.
-      const tx = App.pageData[pn]?.canvasOffsetX || 0;
-      const ty = App.pageData[pn]?.canvasOffsetY || 0;
-      tmpFc.setViewportTransform([dpiMult, 0, 0, dpiMult, -tx * dpiMult, -ty * dpiMult]);
+      // Les objets sont en points PDF, origine = coin haut-gauche de la page :
+      // une simple homothétie suffit, sans offset de centrage à compenser.
+      tmpFc.setViewportTransform([exportScale, 0, 0, exportScale, 0, 0]);
       tmpFc.renderAll(); // synchrone — garanti sur canvas hors-écran
 
       // 3. Composite : PDF (fond) + annotations par-dessus, canvas 2D natif
@@ -2576,18 +2613,28 @@ async function exportPDF(selectedLayerIds, resolution, format = 'original') {
         finalCanvas = composite; // format original = dimensions pixel natives
       }
 
-      // 5. Ajouter la page au PDF (unit: px, dimensions exactes, pas de conversion)
-      const FW     = finalCanvas.width;
-      const FH     = finalCanvas.height;
-      const orient = FW > FH ? 'l' : 'p';
+      // 5. Ajouter la page au PDF, DIMENSIONNÉE EN POINTS.
+      //    La v1.1 utilisait `unit: 'px'`, que jsPDF interprète à 96 dpi : la
+      //    page exportée n'avait aucun rapport de taille avec le plan source,
+      //    ce qui rendait toute impression à l'échelle impossible.
+      const FW = finalCanvas.width;
+      const FH = finalCanvas.height;
+      const ptW = paperFmt
+        ? (FW > FH ? paperFmt.h : paperFmt.w) * MM_TO_PT   // format papier demandé
+        : vp0.width;                                       // taille native de la page
+      const ptH = paperFmt
+        ? (FW > FH ? paperFmt.w : paperFmt.h) * MM_TO_PT
+        : vp0.height;
+
+      const orient = ptW > ptH ? 'l' : 'p';
       const imgURL = finalCanvas.toDataURL('image/jpeg', 0.93);
 
       if (!doc) {
-        doc = new jsPDF({ orientation: orient, unit: 'px', format: [FW, FH], compress: true });
+        doc = new jsPDF({ orientation: orient, unit: 'pt', format: [ptW, ptH], compress: true });
       } else {
-        doc.addPage([FW, FH], orient);
+        doc.addPage([ptW, ptH], orient);
       }
-      doc.addImage(imgURL, 'JPEG', 0, 0, FW, FH);
+      doc.addImage(imgURL, 'JPEG', 0, 0, ptW, ptH);
     }
 
     if (doc) {
@@ -2671,6 +2718,7 @@ function initToolbar() {
   document.getElementById('btn-zoom-in') .addEventListener('click', () => changeZoom(1.25));
   document.getElementById('btn-zoom-out').addEventListener('click', () => changeZoom(0.8));
   document.getElementById('btn-zoom-fit').addEventListener('click', fitToWindow);
+  document.getElementById('btn-zoom-100')?.addEventListener('click', zoomToActualSize);
 
   // Fichiers
   document.getElementById('btn-open-pdf').addEventListener('click', () => document.getElementById('input-pdf').click());
@@ -2814,6 +2862,7 @@ function changeZoom(factor) {
   const cy  = fc.height / 2;
   fc.zoomToPoint({ x: cx, y: cy }, nz);
   updateZoomDisplay();
+  scheduleBackgroundRefresh();
 }
 
 // ============================================================
@@ -2867,18 +2916,27 @@ function duplicateSelected() {
   pasteClipboard();
 }
 
+// Ajuste le zoom/pan pour que la page entière tienne dans la fenêtre.
+// Seul le viewportTransform bouge : les coordonnées des objets sont intactes.
 function fitToWindow() {
   if (!App.pdfDoc) return;
-  const pd   = App.pageData[App.currentPage];
+  const pd = App.pageData[App.currentPage];
   if (!pd?.pageW) return;
-  const fc   = App.canvas;
-  const scaleX = fc.width  / pd.pageW;
-  const scaleY = fc.height / pd.pageH;
-  const scale  = Math.min(scaleX, scaleY) * 0.95;
-  const tx     = (fc.width  - pd.pageW * scale) / 2;
-  const ty     = (fc.height - pd.pageH * scale) / 2;
+  const fc    = App.canvas;
+  const scale = Math.min(fc.width / pd.pageW, fc.height / pd.pageH) * 0.95;
+  const tx    = (fc.width  - pd.pageW * scale) / 2;
+  const ty    = (fc.height - pd.pageH * scale) / 2;
   fc.setViewportTransform([scale, 0, 0, scale, tx, ty]);
   updateZoomDisplay();
+  scheduleBackgroundRefresh();
+}
+
+// Zoom à 100 % = 1 point écran par point PDF (taille réelle à 72 dpi)
+function zoomToActualSize() {
+  const fc = App.canvas;
+  fc.zoomToPoint({ x: fc.width / 2, y: fc.height / 2 }, 1);
+  updateZoomDisplay();
+  scheduleBackgroundRefresh();
 }
 
 function updateZoomDisplay() {
@@ -3061,9 +3119,9 @@ function initModals() {
     const realDist = parseFloat(document.getElementById('calib-real-dist').value);
     const unit     = document.getElementById('calib-unit').value;
     if (!realDist || realDist <= 0) { showToast('Saisir une distance valide'); return; }
-    const pixelsPerUnit = App._pendingCalibPixels / realDist;
+    const pointsPerUnit = App._pendingCalibPixels / realDist;
     closeModal(document.getElementById('modal-calib'));
-    setPageCalibration(pixelsPerUnit, unit);
+    setPageCalibration(pointsPerUnit, unit);
     App._pendingCalibPixels = null;
     // Revenir à l'outil select
     setActiveTool('select');
@@ -3083,25 +3141,21 @@ function initModals() {
     const unit       = document.getElementById('scale-unit').value;
     const denominator = preset === 'custom' ? parseFloat(customVal) : parseFloat(preset);
     if (!denominator || denominator <= 0) { showToast('Sélectionner ou saisir une échelle valide'); return; }
+    if (!App.pageData[App.currentPage]) return;
 
-    const pd = App.pageData[App.currentPage];
-    if (!pd) return;
-    const renderScale = pd.renderScale || 1;
-
-    // 1 PDF point = 1/72 pouce = 25.4/72 mm
-    // A l'échelle 1:N sur papier → 1 mm papier = N mm réels
-    // 1 px = (25.4/72) mm papier / renderScale → * N = réel en mm → /10 = cm → /100 = m
-    const mmPerPt     = 25.4 / 72;
-    const mmPerPixel  = mmPerPt / renderScale;  // mm papier par pixel affiché
-    const realMmPerPx = mmPerPixel * denominator; // mm réels par pixel
-
-    let pixelsPerUnit;
-    if (unit === 'm')      pixelsPerUnit = 1000 / realMmPerPx;
-    else if (unit === 'cm') pixelsPerUnit = 10   / realMmPerPx;
-    else                    pixelsPerUnit = 1    / realMmPerPx;
+    // Conversion purement géométrique (geometry.js), sans aucune dépendance à
+    // l'affichage — en v1.1 elle passait par renderScale et devenait fausse
+    // dès que la fenêtre changeait de taille.
+    let pointsPerUnit;
+    try {
+      pointsPerUnit = scaleToPointsPerUnit(denominator, unit);
+    } catch (err) {
+      showError(describeError(err)); return;
+    }
 
     closeModal(document.getElementById('modal-calib-scale'));
-    setPageCalibration(pixelsPerUnit, unit);
+    setPageCalibration(pointsPerUnit, unit);
+    if (document.getElementById('calib-all-pages')?.checked) applyCalibrationToAllPages();
   });
 
   // --- Modal export ---
@@ -3258,6 +3312,12 @@ function initKeyboardShortcuts() {
     }
 
     // Raccourcis outils
+    // Navigation entre pages (absente en v1.1 : seules les vignettes le permettaient)
+    if (e.key === 'PageDown') { e.preventDefault(); switchPage(App.currentPage + 1); return; }
+    if (e.key === 'PageUp')   { e.preventDefault(); switchPage(App.currentPage - 1); return; }
+    if (e.key === '0') { e.preventDefault(); fitToWindow();      return; }
+    if (e.key === '1') { e.preventDefault(); zoomToActualSize(); return; }
+
     const shortcuts = { v: 'select', h: 'pan', l: 'line', p: 'polyline', g: 'polygon', r: 'rect', c: 'circle', f: 'freedraw', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate' };
     if (!isCtrl && shortcuts[e.key]) setActiveTool(shortcuts[e.key]);
   });

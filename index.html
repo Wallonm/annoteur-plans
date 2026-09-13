@@ -371,7 +371,8 @@
   <button class="h-btn" id="btn-zoom-out" title="Dézoomer (ou molette)">🔍−</button>
   <span id="zoom-display">100%</span>
   <button class="h-btn" id="btn-zoom-in" title="Zoomer (ou molette)">🔍+</button>
-  <button class="h-btn" id="btn-zoom-fit" title="Ajuster à la fenêtre">⊞</button>
+  <button class="h-btn" id="btn-zoom-fit" title="Ajuster à la fenêtre (0)">⊞</button>
+  <button class="h-btn" id="btn-zoom-100" title="Taille réelle 100 % (1)">1:1</button>
   <div class="h-sep" id="dim-sep" style="display:none"></div>
   <div id="dim-display">
     <span style="font-size:11px;color:var(--text-dim)">L</span>
@@ -461,7 +462,7 @@
         <div class="prop-label">Contour</div>
         <div class="prop-row">
           <input type="color" class="prop-color" id="prop-stroke-color" value="#e53e3e" title="Couleur du contour">
-          <span class="prop-label" style="flex:1">Épaisseur</span>
+          <span class="prop-label" style="flex:1">Épaisseur (pt)</span>
           <input type="number" class="prop-num" id="prop-stroke-width" value="2" min="0.5" max="50" step="0.5">
         </div>
       </div>
@@ -493,7 +494,7 @@
         <div class="prop-label">Texte</div>
         <div class="prop-row">
           <input type="color" class="prop-color" id="prop-text-color" value="#000000">
-          <span class="prop-label">Taille</span>
+          <span class="prop-label">Corps (pt)</span>
           <input type="number" class="prop-num" id="prop-font-size" value="16" min="6" max="120">
         </div>
       </div>
@@ -535,7 +536,7 @@
           </select>
         </div>
       </label>
-      <div style="font-size:11px;color:var(--text-dim)">Distance en pixels : <strong id="calib-px-dist">—</strong> px</div>
+      <div style="font-size:11px;color:var(--text-dim)">Distance mesurée sur le plan : <strong id="calib-px-dist">—</strong> pt</div>
     </div>
     <div class="modal-footer">
       <button class="modal-btn" id="calib-cancel">Annuler</button>
@@ -568,7 +569,12 @@
         <select id="scale-unit">
           <option value="m">Mètres (m)</option>
           <option value="cm" selected>Centimètres (cm)</option>
+          <option value="mm">Millimètres (mm)</option>
         </select>
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="calib-all-pages" style="width:auto;accent-color:var(--accent)">
+        Appliquer cette échelle à toutes les pages
       </label>
     </div>
     <div class="modal-footer">
@@ -638,6 +644,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="geometry.js"></script>
+<script src="migrate.js"></script>
 <script src="symbols.js"></script>
 <script src="app.js"></script>
 </body>

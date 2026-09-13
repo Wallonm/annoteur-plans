@@ -1,5 +1,68 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.3.0 — Lot 2 : Fondation (repère en points PDF)
+
+Le chantier de fond : les annotations ne sont plus stockées en pixels écran.
+
+### Changé — repère de coordonnées
+
+- **Les annotations sont désormais en POINTS PDF** (1 pt = 1/72 pouce = 0,353 mm),
+  dans le repère de la page, origine au coin haut-gauche. L'adaptation à la fenêtre
+  passe uniquement par le zoom/pan de la vue, qui ne touche pas aux objets.
+  Auparavant le repère était recalculé à chaque rendu depuis la taille de la fenêtre
+  (`renderScale`, `canvasOffsetX/Y`), ce qui entraînait :
+  - un décalage de toutes les annotations à la réouverture sur un autre écran,
+  - une calibration devenue fausse après un simple redimensionnement,
+  - un export dépendant d'offsets issus d'une autre session.
+  Ces champs n'existent plus.
+- **La calibration est en `pointsPerUnit`**, grandeur stable à vie. Le calcul depuis
+  une échelle (1:50, 1:100…) est purement géométrique. L'échelle correspondante est
+  affichée en clair dans le panneau (« ✓ 1 cm = 1,86 pt — échelle ≈ 1:15 »).
+- **Migration automatique des projets v1.0/v1.1**, page par page, avec le `renderScale`
+  et l'offset propres à chacune — un même projet pouvait en contenir plusieurs.
+  Vérifié sur `projet.annot.json` : 132 annotations sur 7 pages, deux repères
+  distincts, toutes replacées correctement.
+- **Le redimensionnement de la fenêtre fonctionne** : le canvas suit et la vue se
+  réajuste (le gestionnaire était inopérant dès qu'un PDF était chargé).
+- **La rotation d'une page fait tourner les annotations avec le plan.** Quatre
+  rotations ramènent exactement à l'état initial.
+- **L'épaisseur de trait et le corps de texte sont des grandeurs physiques** (en points).
+  Leurs valeurs par défaut s'adaptent au format du plan à l'ouverture. Les formes
+  utilisent `strokeUniform` : redimensionner ne déforme plus le contour.
+
+### Changé — affichage
+
+- **Le plan est re-rendu par pdf.js au niveau de zoom courant** (anti-rebond 250 ms,
+  plafond ×4, rendu précédent annulé). La v1.1 étirait une image JPEG : zoomer sur
+  une cote donnait une bouillie de pixels. Mesuré : 919 px → 3506 px de large au zoom.
+
+### Corrigé
+
+- **L'export conserve la taille physique du plan.** jsPDF était appelé en `unit: 'px'`
+  (96 dpi), sans rapport avec la page source : toute impression à l'échelle était
+  faussée. Les pages sont maintenant dimensionnées en points. Vérifié : page source
+  2599,3 × 3676,6 pt → page exportée 2599,3 × 3676,6 pt.
+- **L'export ne dépend plus du renderScale d'affichage** : une page jamais ouverte
+  s'exportait à une échelle arbitraire.
+
+### Ajouté
+
+- **Échelle applicable à toutes les pages** en une case à cocher (impossible tant que
+  la calibration dépendait de l'affichage propre à chaque page).
+- Unité **mm** dans la calibration par échelle.
+- Bouton et raccourci **taille réelle 1:1** (`1`), **ajuster** (`0`).
+- **Navigation entre pages au clavier** : `Page↑` / `Page↓`.
+
+### Qualité de code
+
+- `geometry.js` : fonctions géométriques pures (cotes, nuage de révision, conversions
+  d'échelle, surfaces, rotation, accrochage), sans DOM ni Fabric.
+- `migrate.js` : migration des fichiers projet, isolée et testable.
+- **28 tests automatisés** (`node --test "tests/*.test.js"`, zéro dépendance), dont la
+  migration du projet réel utilisé comme fixture. Un test a immédiatement révélé une
+  anomalie d'angle de texte de cote (360° au lieu de 0°), corrigée.
+- Code mort supprimé : `createDimensionObject`, `addDefaultLayer`, `normV` dupliqué.
+
 ## v1.2.0 — Lot 1 : Fiabilité
 
 Objectif : supprimer toute perte de données silencieuse et rendre le chargement supportable.
