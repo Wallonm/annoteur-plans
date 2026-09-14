@@ -433,6 +433,23 @@
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Barre de style contextuelle (apparaît quand une forme est sélectionnée) */
+    #canvas-style-bar {
+      display: none; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+      z-index: 300; background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+      align-items: center; gap: 6px; padding: 5px 10px;
+      white-space: nowrap; pointer-events: auto;
+    }
+    #canvas-style-bar.visible { display: flex; }
+    #canvas-style-bar .sb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+    #canvas-style-bar label { font-size: 11px; color: var(--text-dim); }
+    #canvas-style-bar input[type=color] { width: 26px; height: 26px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+    #canvas-style-bar input[type=number] { width: 44px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 4px; font-size: 12px; text-align: center; }
+    #canvas-style-bar select { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 3px 4px; font-size: 11px; }
+    #sb-fill-none { font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--text-dim); cursor: pointer; }
+    #sb-fill-none.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -493,17 +510,15 @@
     <button class="tool-btn" data-tool="pan" title="Déplacer la vue (Espace)">✋</button>
     <div class="tool-sep"></div>
     <button class="tool-btn" data-tool="line" title="Ligne (L)">╱</button>
-    <button class="tool-btn" data-tool="polyline" title="Polyligne (P) — Dbl-clic pour terminer">📐</button>
-    <button class="tool-btn" data-tool="polygon" title="Polygone (G) — Dbl-clic pour fermer">⬡</button>
     <button class="tool-btn" data-tool="rect" title="Rectangle (R)">▭</button>
     <button class="tool-btn" data-tool="circle" title="Cercle/Ellipse (C)">○</button>
-    <button class="tool-btn" data-tool="freedraw" title="Dessin libre (F)">✏️</button>
     <button class="tool-btn" data-tool="cloud" title="Nuage de révision (N)">☁</button>
     <button class="tool-btn" data-tool="text" title="Texte (T)">T</button>
     <div class="tool-sep"></div>
     <button class="tool-btn" data-tool="measure" title="Cote/Mesure (M)">⟵⟶</button>
+    <button class="tool-btn" data-tool="areapoly" title="Mesure de surface libre — Dbl-clic pour fermer (A)">⬟</button>
     <button class="tool-btn" data-tool="count" title="Compter (X) — un clic par élément">①</button>
-    <button class="tool-btn" data-tool="leader" title="Bulle de renvoi (A)">💬</button>
+    <button class="tool-btn" data-tool="leader" title="Bulle de renvoi">💬</button>
     <button class="tool-btn" id="btn-area" title="Surface et périmètre de la sélection (S)">▦</button>
     <button class="tool-btn" data-tool="calibrate" title="Calibrer la page (K)">🎯</button>
     <div class="tool-sep"></div>
@@ -521,6 +536,20 @@
   <!-- Zone canvas -->
   <div id="canvas-area">
     <div id="canvas-wrapper">
+      <!-- Barre de style contextuelle -->
+      <div id="canvas-style-bar">
+        <label>Contour</label>
+        <input type="color" id="sb-stroke-color" title="Couleur du contour">
+        <input type="number" id="sb-stroke-width" min="0.5" max="50" step="0.5" title="Épaisseur (pt)" style="width:44px">
+        <div class="sb-sep"></div>
+        <label>Fond</label>
+        <input type="color" id="sb-fill-color" title="Couleur de fond">
+        <button id="sb-fill-none" title="Fond transparent">∅</button>
+        <div class="sb-sep"></div>
+        <label>Texte</label>
+        <input type="color" id="sb-text-color" title="Couleur du texte">
+        <input type="number" id="sb-font-size" min="6" max="120" title="Corps (pt)" style="width:44px">
+      </div>
       <div id="canvas-container">
         <canvas id="main-canvas"></canvas>
       </div>

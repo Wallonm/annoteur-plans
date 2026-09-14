@@ -97,6 +97,7 @@ const App = {
 document.addEventListener('DOMContentLoaded', () => {
   initCanvas();
   initToolbar();
+  initStyleBar();
   initSidebar();
   initModals();
   initSymbolLibrary();
@@ -341,7 +342,7 @@ function collectSnapCandidates() {
 // Applique l'accrochage à un point du plan
 function snapPoint(pt, e) {
   const tool = App.activeTool;
-  if (!['line', 'polyline', 'polygon', 'measure', 'calibrate'].includes(tool)) return pt;
+  if (!['line', 'polyline', 'polygon', 'measure', 'calibrate', 'areapoly'].includes(tool)) return pt;
 
   let out = pt;
 
@@ -407,6 +408,14 @@ function handleMouseDown(opt) {
     }
   }
 
+  // Clic pendant la mesure libre : fermer l'overlay et réinitialiser
+  if (App.draw._areaTempPoly && App.activeTool === 'areapoly') {
+    dismissAreaOverlay();
+    App.draw.points = []; App.draw.active = false;
+    return;
+  }
+  if (App.activeTool === 'areapoly' && !App.draw.active) dismissAreaOverlay();
+
   switch (App.activeTool) {
     case 'calibrate': toolCalibrate_down(pt); break;
     case 'measure':   toolMeasure_down(pt);   break;
@@ -414,6 +423,7 @@ function handleMouseDown(opt) {
     case 'cloud':     toolCloud_down(pt);     break;
     case 'polyline':  toolPolyline_down(pt);  break;
     case 'polygon':   toolPolygon_down(pt);   break;
+    case 'areapoly':  toolAreaPoly_down(pt);  break;
     case 'rect':      toolRect_down(pt);      break;
     case 'circle':    toolCircle_down(pt);    break;
     case 'text':      toolText_down(pt);      break;
@@ -488,6 +498,7 @@ function handleMouseMove(opt) {
         fc.requestRenderAll();
       }
       break;
+    case 'areapoly':
     case 'polyline':
     case 'polygon':
       if (App.draw.points.length > 0 && App.draw.previewLine) {
@@ -575,8 +586,9 @@ function handleMouseUp(opt) {
 }
 
 function handleDblClick(opt) {
-  if (App.activeTool === 'polyline') toolPolyline_finish();
-  if (App.activeTool === 'polygon')  toolPolygon_finish();
+  if (App.activeTool === 'polyline')  toolPolyline_finish();
+  if (App.activeTool === 'polygon')   toolPolygon_finish();
+  if (App.activeTool === 'areapoly')  toolAreaPoly_finish(App.canvas);
 }
 
 // ============================================================
@@ -1462,7 +1474,7 @@ function buildDimGroupOnCanvas(p1, p2, geo, layerId) {
   const label   = formatDimension(pixDist, calib);
   const txtAngle = (geo.angle > 90 || geo.angle < -90) ? geo.angle + 180 : geo.angle;
 
-  const ls = { stroke: tp.strokeColor, strokeWidth: tp.strokeWidth, fill: '', strokeDashArray: tp.dashArray };
+  const ls = { stroke: tp.strokeColor, strokeWidth: 1, fill: '', strokeDashArray: tp.dashArray, strokeUniform: true };
 
   const coteLine = new fabric.Line([geo.c1.x, geo.c1.y, geo.c2.x, geo.c2.y], ls);
 
@@ -3018,11 +3030,15 @@ function resetDrawState() {
   // marqueurs). Balisés par data.temp : les calques verrouillés ne sont plus touchés.
   removeTempObjects();
 
+  // Nettoyer les segments de la mesure libre
+  (App.draw.areaSegs || []).forEach(s => fc.remove(s));
+  if (App.draw._areaTempPoly) fc.remove(App.draw._areaTempPoly);
+
   App.draw = {
     active: false, startPt: null, tempObj: null,
     points: [], previewLine: null, previewText: null, step: 0,
     dimP1: null, dimP2: null, dimPreviewObjs: null, dimDot1: null, dimDot2: null,
-    closingLine: null,
+    closingLine: null, areaSegs: [], _areaTempPoly: null,
   };
   hideIndicator('calib-indicator');
   hideIndicator('measure-indicator');
@@ -3170,8 +3186,40 @@ function initToolbar() {
   });
 }
 
+// Outils de mesure temporaire : les annotations existantes ne doivent pas
+// être cliquables pendant le tracé.
+const MEASURE_TOOLS = ['areapoly', 'measure'];
+
+function _freezeCanvasObjects(fc) {
+  fc.getObjects().forEach(o => {
+    if (o.data?.temp) return;
+    o._frozenSelectable = o.selectable;
+    o._frozenEvented    = o.evented;
+    o.selectable = false;
+    o.evented    = false;
+  });
+  fc.discardActiveObject();
+}
+
+function _unfreezeCanvasObjects(fc) {
+  fc.getObjects().forEach(o => {
+    if (o.data?.temp) return;
+    if (o._frozenSelectable !== undefined) {
+      o.selectable = o._frozenSelectable;
+      o.evented    = o._frozenEvented;
+      delete o._frozenSelectable;
+      delete o._frozenEvented;
+    }
+  });
+}
+
 function setActiveTool(toolName) {
   const fc = App.canvas;
+
+  // Restaurer la sélectabilité si on quitte un outil de mesure temporaire
+  if (MEASURE_TOOLS.includes(App.activeTool)) {
+    _unfreezeCanvasObjects(fc);
+  }
 
   // Désactiver l'ancien outil
   if (App.activeTool === 'freedraw') {
@@ -3196,6 +3244,11 @@ function setActiveTool(toolName) {
 
   if (toolName === 'freedraw') toolFreeDraw_activate();
   if (toolName === 'text') fc.defaultCursor = 'text';
+
+  // Geler les annotations existantes pendant le tracé de mesure
+  if (MEASURE_TOOLS.includes(toolName)) {
+    _freezeCanvasObjects(fc);
+  }
 }
 
 function changeZoom(factor) {
@@ -3314,9 +3367,9 @@ function changeZOrder(action) {
 // l'implémentation (l'infobulle annonçait « Espace » pour un raccourci « H »).
 // ============================================================
 const TOOL_SHORTCUTS = {
-  v: 'select', h: 'pan', l: 'line', p: 'polyline', g: 'polygon', r: 'rect',
-  c: 'circle', f: 'freedraw', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate',
-  x: 'count', a: 'leader',
+  v: 'select', h: 'pan', l: 'line', r: 'rect',
+  c: 'circle', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate',
+  x: 'count', a: 'areapoly',
 };
 
 const TOOL_LABELS = {
@@ -3457,6 +3510,87 @@ function updatePropsFromSelection() {
 
   // Mettre à jour l'affichage L/H dans le header
   updateDimDisplay(sel);
+}
+
+// ============================================================
+// BARRE DE STYLE CONTEXTUELLE
+// ============================================================
+function initStyleBar() {
+  const bar    = document.getElementById('canvas-style-bar');
+  const sbSC   = document.getElementById('sb-stroke-color');
+  const sbSW   = document.getElementById('sb-stroke-width');
+  const sbFC   = document.getElementById('sb-fill-color');
+  const sbFN   = document.getElementById('sb-fill-none');
+  const sbTC   = document.getElementById('sb-text-color');
+  const sbFS   = document.getElementById('sb-font-size');
+  const sbTG   = sbTC?.closest('.sb-sep + label')?.parentElement;
+
+  function getSelection() { return App.canvas?.getActiveObject(); }
+  function isFillTransparent(fill) { return !fill || fill === 'transparent' || fill === 'rgba(0,0,0,0)'; }
+
+  function showBar(obj) {
+    if (!bar || !obj) { bar?.classList.remove('visible'); return; }
+    // Ignorer les handles internes
+    if (obj.data?.type === 'dimHandle' || obj.data?.type === 'polyHandle') { bar.classList.remove('visible'); return; }
+
+    bar.classList.add('visible');
+    const isText = obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text';
+
+    // Contour
+    if (sbSC) sbSC.value = obj.stroke || '#000000';
+    if (sbSW) sbSW.value = obj.strokeWidth ?? 2;
+
+    // Remplissage
+    const fillTrans = isFillTransparent(obj.fill);
+    if (sbFC) sbFC.value = fillTrans ? '#ffffff' : (obj.fill || '#ffffff');
+    sbFN?.classList.toggle('active', fillTrans);
+
+    // Texte
+    const textVisible = isText || obj.type === 'areaLabel';
+    const textSection = bar.querySelectorAll('.sb-sep:last-of-type, .sb-sep:last-of-type ~ *');
+    textSection.forEach(el => { el.style.display = textVisible ? '' : 'none'; });
+    if (isText) {
+      if (sbTC) sbTC.value = obj.fill || '#000000';
+      if (sbFS) sbFS.value = obj.fontSize || 14;
+    }
+  }
+
+  // Écoutes canvas
+  const fc = App.canvas;
+  if (!fc) return;
+  fc.on('selection:created', e => showBar(e.selected?.[0] || e.target));
+  fc.on('selection:updated', e => showBar(e.selected?.[0] || e.target));
+  fc.on('selection:cleared', () => bar?.classList.remove('visible'));
+
+  // Actions
+  if (sbSC) sbSC.addEventListener('input', e => {
+    document.getElementById('prop-stroke-color').value = e.target.value;
+    document.getElementById('prop-stroke-color').dispatchEvent(new Event('input'));
+  });
+  if (sbSW) sbSW.addEventListener('change', e => {
+    document.getElementById('prop-stroke-width').value = e.target.value;
+    document.getElementById('prop-stroke-width').dispatchEvent(new Event('input'));
+  });
+  if (sbFC) sbFC.addEventListener('input', e => {
+    const fillMode = document.getElementById('prop-fill-mode');
+    if (fillMode?.value === 'transparent') { fillMode.value = 'solid'; fillMode.dispatchEvent(new Event('change')); }
+    document.getElementById('prop-fill-color').value = e.target.value;
+    document.getElementById('prop-fill-color').dispatchEvent(new Event('input'));
+    sbFN?.classList.remove('active');
+  });
+  if (sbFN) sbFN.addEventListener('click', () => {
+    const fillMode = document.getElementById('prop-fill-mode');
+    if (fillMode) { fillMode.value = 'transparent'; fillMode.dispatchEvent(new Event('change')); }
+    sbFN.classList.add('active');
+  });
+  if (sbTC) sbTC.addEventListener('input', e => {
+    document.getElementById('prop-text-color').value = e.target.value;
+    document.getElementById('prop-text-color').dispatchEvent(new Event('input'));
+  });
+  if (sbFS) sbFS.addEventListener('change', e => {
+    document.getElementById('prop-font-size').value = e.target.value;
+    document.getElementById('prop-font-size').dispatchEvent(new Event('input'));
+  });
 }
 
 // ============================================================
@@ -3804,6 +3938,8 @@ function initKeyboardShortcuts() {
       return;
     }
     if (e.key === 'Escape') {
+      dismissAreaOverlay();
+      _areaPolyCleanup(App.canvas);
       resetDrawState();
       if (App.activeTool !== 'select') setActiveTool('select');
       return;

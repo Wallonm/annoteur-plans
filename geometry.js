@@ -125,15 +125,20 @@ function pointsPerUnitToScale(pointsPerUnit, unit) {
 
 // Formatage d'une longueur (en points) dans l'unité calibrée
 function formatDimension(lengthPt, calib) {
-  if (!calib || !calib.pointsPerUnit) return `${Math.round(lengthPt)} pt`;
-  return `${(lengthPt / calib.pointsPerUnit).toFixed(2)} ${calib.unit}`;
+  if (!calib || !calib.pointsPerUnit) return `${Math.round(lengthPt).toLocaleString('fr-FR')} pt`;
+  let v    = lengthPt / calib.pointsPerUnit;
+  let unit = calib.unit;
+  if (unit === 'cm' && v > 999) { v /= 100; unit = 'm'; }
+  return `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${unit}`;
 }
 
 // Formatage d'une surface (en points²)
 function formatArea(areaPt2, calib) {
-  if (!calib || !calib.pointsPerUnit) return `${Math.round(areaPt2)} pt²`;
-  const v = areaPt2 / (calib.pointsPerUnit ** 2);
-  return `${v.toFixed(2)} ${calib.unit}²`;
+  if (!calib || !calib.pointsPerUnit) return `${Math.round(areaPt2).toLocaleString('fr-FR')} pt²`;
+  let v    = areaPt2 / (calib.pointsPerUnit ** 2);
+  let unit = calib.unit;
+  if (unit === 'cm' && v > 999) { v /= 10000; unit = 'm'; }
+  return `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${unit}²`;
 }
 
 // --- Surfaces et longueurs -----------------------------------

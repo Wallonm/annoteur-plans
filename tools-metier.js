@@ -40,7 +40,7 @@ function addAreaLabel(obj) {
   const label = new fabric.Text(texte, {
     left: cx, top: cy,
     originX: 'center', originY: 'center',
-    fontSize: App.toolProps.fontSize,
+    fontSize: 13,
     fill: App.toolProps.strokeColor,
     fontFamily: 'Arial',
     textAlign: 'center',
@@ -412,6 +412,127 @@ function openMeasuresModal() {
     }
   }
   openModal('modal-measures');
+}
+
+// ------------------------------------------------------------
+// OUTIL DE MESURE LIBRE (polygone temporaire)
+// ------------------------------------------------------------
+// Dessine un polygone temporaire en pointillés bleus ; au double-clic
+// il se ferme, affiche surface + périmètre dans un overlay flottant,
+// puis disparaît quand l'utilisateur clique ailleurs ou presse Échap.
+// ------------------------------------------------------------
+
+function toolAreaPoly_down(pt) {
+  const fc = App.canvas;
+  App.draw.points.push({ x: pt.x, y: pt.y });
+  App.draw.active = true;
+
+  // Segment de preview
+  if (App.draw.previewLine) fc.remove(App.draw.previewLine);
+  const prev = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
+    stroke: '#2090ff', strokeWidth: 1.5, strokeDashArray: [5, 3],
+    selectable: false, evented: false,
+  });
+  fc.add(prev);
+  App.draw.previewLine = prev;
+
+  // Segment permanent si ≥2 points
+  if (App.draw.points.length >= 2) {
+    const a = App.draw.points[App.draw.points.length - 2];
+    const b = App.draw.points[App.draw.points.length - 1];
+    const seg = new fabric.Line([a.x, a.y, b.x, b.y], {
+      stroke: '#2090ff', strokeWidth: 1.5, strokeDashArray: [5, 3],
+      selectable: false, evented: false,
+    });
+    fc.add(seg);
+    App.draw.areaSegs = App.draw.areaSegs || [];
+    App.draw.areaSegs.push(seg);
+  }
+  fc.requestRenderAll();
+}
+
+function toolAreaPoly_finish(fc) {
+  const pts = App.draw.points;
+  if (pts.length < 3) { _areaPolyCleanup(fc); return; }
+
+  // Ajouter le segment de fermeture
+  const closing = new fabric.Polygon(pts.map(p => ({ x: p.x, y: p.y })), {
+    fill: 'rgba(32,144,255,0.08)', stroke: '#2090ff', strokeWidth: 1.5,
+    strokeDashArray: [5, 3], selectable: false, evented: false,
+  });
+
+  // Retirer les segments provisoires
+  _areaPolyCleanup(fc);
+  fc.add(closing);
+  App.draw._areaTempPoly = closing;
+
+  // Calculer
+  const calib = getPageCalibration();
+  const aire  = polygonArea(pts);
+  const perim = pathLength(pts, true);
+
+  // Afficher l'overlay
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  showAreaOverlay(
+    `${formatArea(aire, calib)}\n${formatDimension(perim, calib)} de périmètre`,
+    cx, cy
+  );
+
+  fc.requestRenderAll();
+}
+
+function _areaPolyCleanup(fc) {
+  if (App.draw.previewLine) { fc.remove(App.draw.previewLine); App.draw.previewLine = null; }
+  (App.draw.areaSegs || []).forEach(s => fc.remove(s));
+  App.draw.areaSegs = [];
+  if (App.draw._areaTempPoly) { fc.remove(App.draw._areaTempPoly); App.draw._areaTempPoly = null; }
+  App.draw.points  = [];
+  App.draw.active  = false;
+  fc.requestRenderAll();
+}
+
+function dismissAreaOverlay() {
+  const ov = document.getElementById('area-overlay');
+  if (ov) ov.style.display = 'none';
+  const fc = App.canvas;
+  if (fc && App.draw._areaTempPoly) {
+    fc.remove(App.draw._areaTempPoly);
+    App.draw._areaTempPoly = null;
+    fc.requestRenderAll();
+  }
+}
+
+function showAreaOverlay(text, cx, cy) {
+  const fc  = App.canvas;
+  const el  = fc.lowerCanvasEl;
+  const rect = el.getBoundingClientRect();
+  const vpt  = fc.viewportTransform;
+  // canvas coords → screen coords
+  const sx = cx * vpt[0] + vpt[4] + rect.left;
+  const sy = cy * vpt[3] + vpt[5] + rect.top;
+
+  let ov = document.getElementById('area-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'area-overlay';
+    ov.style.cssText = `
+      position:fixed; z-index:2000;
+      background:rgba(20,24,40,.92); color:#fff;
+      border:1px solid #2090ff; border-radius:8px;
+      padding:10px 16px; font-size:15px; font-weight:600;
+      white-space:pre; text-align:center; pointer-events:none;
+      box-shadow:0 4px 16px rgba(0,0,0,.5); line-height:1.6;
+    `;
+    document.body.appendChild(ov);
+  }
+  ov.textContent = text;
+  ov.style.display = 'block';
+
+  // Centrer sur le centroïde
+  const w = 220, h = 64;
+  ov.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, sx - w / 2))}px`;
+  ov.style.top  = `${Math.max(8, Math.min(window.innerHeight - h - 8, sy - h / 2))}px`;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
