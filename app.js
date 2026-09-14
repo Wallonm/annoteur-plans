@@ -3555,41 +3555,60 @@ function initStyleBar() {
     }
   }
 
-  // Écoutes canvas
+  // Écoutes canvas — on conserve la référence de l'objet sélectionné
+  // car cliquer sur un input (color picker…) peut vider la sélection Fabric
   const fc = App.canvas;
   if (!fc) return;
-  fc.on('selection:created', e => showBar(e.selected?.[0] || e.target));
-  fc.on('selection:updated', e => showBar(e.selected?.[0] || e.target));
-  fc.on('selection:cleared', () => bar?.classList.remove('visible'));
+  let _lastObj = null;
 
-  // Actions
+  fc.on('selection:created', e => { _lastObj = e.selected?.[0] || e.target; showBar(_lastObj); });
+  fc.on('selection:updated', e => { _lastObj = e.selected?.[0] || e.target; showBar(_lastObj); });
+  fc.on('selection:cleared', () => {
+    // Si le focus est dans la barre de style, on garde la barre ouverte
+    if (!bar?.contains(document.activeElement)) {
+      _lastObj = null;
+      bar?.classList.remove('visible');
+    }
+  });
+
+  // Applique une propriété directement sur l'objet retenu (+ fallback getActiveObjects)
+  function applyProp(props) {
+    const objs = fc.getActiveObjects().length ? fc.getActiveObjects()
+                                              : (_lastObj ? [_lastObj] : []);
+    if (!objs.length) return;
+    objs.forEach(o => { o.set(props); o.setCoords(); });
+    fc.requestRenderAll();
+    saveHistoryState();
+  }
+
+  // Actions — application directe, sans passer par le panneau latéral
   if (sbSC) sbSC.addEventListener('input', e => {
-    document.getElementById('prop-stroke-color').value = e.target.value;
-    document.getElementById('prop-stroke-color').dispatchEvent(new Event('input'));
+    App.toolProps.strokeColor = e.target.value;
+    applyProp({ stroke: e.target.value });
   });
   if (sbSW) sbSW.addEventListener('change', e => {
-    document.getElementById('prop-stroke-width').value = e.target.value;
-    document.getElementById('prop-stroke-width').dispatchEvent(new Event('input'));
+    const w = Math.max(0.1, parseFloat(e.target.value) || 1);
+    App.toolProps.strokeWidth = w;
+    applyProp({ strokeWidth: w });
   });
   if (sbFC) sbFC.addEventListener('input', e => {
-    const fillMode = document.getElementById('prop-fill-mode');
-    if (fillMode?.value === 'transparent') { fillMode.value = 'solid'; fillMode.dispatchEvent(new Event('change')); }
-    document.getElementById('prop-fill-color').value = e.target.value;
-    document.getElementById('prop-fill-color').dispatchEvent(new Event('input'));
+    App.toolProps.fillColor = e.target.value;
+    applyProp({ fill: e.target.value });
     sbFN?.classList.remove('active');
   });
   if (sbFN) sbFN.addEventListener('click', () => {
-    const fillMode = document.getElementById('prop-fill-mode');
-    if (fillMode) { fillMode.value = 'transparent'; fillMode.dispatchEvent(new Event('change')); }
+    App.toolProps.fillColor = 'transparent';
+    applyProp({ fill: 'transparent' });
     sbFN.classList.add('active');
   });
   if (sbTC) sbTC.addEventListener('input', e => {
-    document.getElementById('prop-text-color').value = e.target.value;
-    document.getElementById('prop-text-color').dispatchEvent(new Event('input'));
+    App.toolProps.fontColor = e.target.value;
+    applyProp({ fill: e.target.value });
   });
   if (sbFS) sbFS.addEventListener('change', e => {
-    document.getElementById('prop-font-size').value = e.target.value;
-    document.getElementById('prop-font-size').dispatchEvent(new Event('input'));
+    const fs = Math.max(6, parseFloat(e.target.value) || 14);
+    App.toolProps.fontSize = fs;
+    applyProp({ fontSize: fs });
   });
 }
 
