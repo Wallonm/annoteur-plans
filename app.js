@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.6.0';   // Lot 5 — Outils métier
+const APP_VERSION  = '1.6.1';   // Calques : repère de page et couleur
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -246,6 +246,10 @@ function initCanvas() {
   });
 
   // Mettre à jour L/H pendant le redimensionnement
+  // Les compteurs « objets sur cette page » du panneau Calques suivent le canvas
+  fc.on('object:added',   scheduleLayersRefresh);
+  fc.on('object:removed', scheduleLayersRefresh);
+
   fc.on('object:scaling', (e) => updateDimDisplay(e.target));
 
   // Synchroniser les poignées quand on déplace un objet
@@ -1847,6 +1851,7 @@ async function switchPage(pageNum) {
 
   await renderCurrentPage();
   loadPageObjects();
+  scheduleLayersRefresh();   // compteurs « sur cette page » et libellé p. N/T
   updateHistoryButtons();
 }
 
@@ -2165,20 +2170,83 @@ function applyLayerPropsToObj(obj) {
 }
 
 // Rendu de la liste des calques dans le panneau
+// Rafraîchissement anti-rebond de la liste : l'hydratation d'une page ajoute
+// les objets un par un (61 sur la page 4 du projet de référence).
+let layersRefreshTimer = null;
+function scheduleLayersRefresh() {
+  clearTimeout(layersRefreshTimer);
+  layersRefreshTimer = setTimeout(renderLayersList, 50);
+}
+
+// Nombre d'objets d'un calque SUR LA PAGE COURANTE.
+// On compte sur le canvas vivant, pas sur l'ensemble du document : c'est
+// justement la question « lesquels me concernent ici ? ».
+function layerCountOnPage(layerId) {
+  if (!App.canvas) return 0;
+  return App.canvas.getObjects()
+    .filter(o => !isTempObject(o) && o.data?.layerId === layerId).length;
+}
+
+// Filtre « cette page » : masque les calques sans objet sur la page courante
+function isPageFilterOn() {
+  return localStorage.getItem('layersPageFilter') === '1';
+}
+function togglePageFilter() {
+  localStorage.setItem('layersPageFilter', isPageFilterOn() ? '0' : '1');
+  renderLayersList();
+}
+
 function renderLayersList() {
   const list = document.getElementById('layers-list');
   if (!list) return;
   list.innerHTML = '';
 
+  // Les calques sont globaux au document : on indique donc, pour chacun,
+  // ce qu'il contient SUR LA PAGE AFFICHÉE.
+  const titre = document.getElementById('layers-page-label');
+  if (titre) {
+    titre.textContent = App.pdfDoc ? ` — p. ${App.currentPage}/${App.totalPages}` : '';
+  }
+
+  const filtre = isPageFilterOn();
+  const btnFiltre = document.getElementById('btn-layers-page-filter');
+  if (btnFiltre) {
+    btnFiltre.classList.toggle('on', filtre);
+    btnFiltre.setAttribute('aria-pressed', String(filtre));
+    btnFiltre.title = filtre
+      ? 'Afficher tous les calques du document'
+      : 'N’afficher que les calques présents sur cette page';
+  }
+
+  let masques = 0;
+
   // Ordre inversé : le calque du dessus en premier visuellement
   [...App.layers].reverse().forEach(layer => {
+    const n = layerCountOnPage(layer.id);
+    if (filtre && n === 0 && layer.id !== App.activeLayerId) { masques++; return; }
+
     const item = document.createElement('div');
-    item.className = `layer-item${layer.id === App.activeLayerId ? ' active' : ''}`;
+    item.className = `layer-item${layer.id === App.activeLayerId ? ' active' : ''}` +
+                     (n === 0 ? ' empty-here' : '');
+    item.dataset.layerId = String(layer.id);
     item.addEventListener('click', () => setActiveLayer(layer.id));
 
-    const dot = document.createElement('div');
+    // Pastille de couleur cliquable : ouvre un sélecteur natif
+    const dot = document.createElement('label');
     dot.className = 'layer-color';
-    dot.style.background = layer.color;
+    dot.style.background = layer.color || '#888899';
+    dot.title = 'Changer la couleur du calque';
+    const picker = document.createElement('input');
+    picker.type  = 'color';
+    picker.value = rgbToHex(layer.color) || '#888899';
+    picker.className = 'layer-color-input';
+    picker.setAttribute('aria-label', `Couleur du calque ${layer.name}`);
+    // Application en direct, enregistrement dans l'historique au relâchement
+    picker.addEventListener('input',  (e) => setLayerColor(layer.id, e.target.value, false));
+    picker.addEventListener('change', (e) => setLayerColor(layer.id, e.target.value, true));
+    picker.addEventListener('click',  (e) => e.stopPropagation());
+    dot.appendChild(picker);
+    dot.addEventListener('click', (e) => e.stopPropagation());
 
     const name = document.createElement('span');
     name.className = 'layer-name';
@@ -2188,12 +2256,6 @@ function renderLayersList() {
       e.stopPropagation();
       openRenameLayerModal(layer.id, layer.name);
     });
-
-    const btnRen = document.createElement('button');
-    btnRen.className = 'layer-btn';
-    btnRen.innerHTML = '✏️';
-    btnRen.title = 'Renommer';
-    btnRen.addEventListener('click', (e) => { e.stopPropagation(); openRenameLayerModal(layer.id, layer.name); });
 
     const btnVis = document.createElement('button');
     btnVis.className = `layer-btn${!layer.visible ? ' hidden' : ''}`;
@@ -2214,9 +2276,54 @@ function renderLayersList() {
     btnDel.style.color = 'var(--danger)';
     btnDel.addEventListener('click', (e) => { e.stopPropagation(); if (confirm(`Supprimer le calque "${layer.name}" ?`)) removeLayer(layer.id); });
 
-    item.append(dot, name, btnRen, btnVis, btnLock, btnDel);
+    // Nombre d'objets de ce calque sur la page affichée
+    const badge = document.createElement('span');
+    badge.className = `layer-count${n === 0 ? ' zero' : ''}`;
+    badge.textContent = String(n);
+    badge.title = n === 0
+      ? 'Aucun objet de ce calque sur cette page'
+      : `${n} objet${n > 1 ? 's' : ''} de ce calque sur cette page`;
+
+    item.append(dot, name, badge, btnVis, btnLock, btnDel);
     list.appendChild(item);
   });
+
+  if (masques > 0) {
+    const note = document.createElement('div');
+    note.className = 'layers-note';
+    note.textContent = `${masques} calque${masques > 1 ? 's' : ''} du document non ${masques > 1 ? 'utilisés' : 'utilisé'} ici`;
+    list.appendChild(note);
+  }
+}
+
+// Couleur du repère d'un calque.
+//   commit = false : aperçu pendant le glissé du sélecteur (événement `input`)
+//   commit = true  : relâchement (`change`) — un seul point d'annulation
+// Sans cette distinction un glissé dans le sélecteur produirait des dizaines
+// d'entrées d'historique, comme le curseur d'opacité au lot 3.
+const layerColorBefore = new Map();
+
+function setLayerColor(id, color, commit) {
+  const layer = App.layers.find(l => l.id === id);
+  if (!layer) return;
+
+  if (!layerColorBefore.has(id)) layerColorBefore.set(id, layer.color);
+  layer.color = color;
+
+  if (!commit) {
+    // Aperçu immédiat sans reconstruire la liste : le sélecteur reste ouvert
+    const dot = document.querySelector(`#layers-list .layer-item[data-layer-id="${id}"] .layer-color`);
+    if (dot) dot.style.background = color;
+    return;
+  }
+
+  const avant = layerColorBefore.get(id);
+  layerColorBefore.delete(id);
+  if (avant === color) return;   // rouvert puis annulé : rien à enregistrer
+
+  renderLayersList();
+  markDirty();
+  saveHistoryState();
 }
 
 function setActiveLayer(id) {
@@ -3444,6 +3551,9 @@ function initSidebar() {
     const id = addLayer(name);
     setActiveLayer(id);
   });
+
+  // Filtre « cette page seulement »
+  document.getElementById('btn-layers-page-filter').addEventListener('click', togglePageFilter);
 
   // Calibration par échelle
   document.getElementById('btn-calib-scale').addEventListener('click', () => {

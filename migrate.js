@@ -102,6 +102,11 @@ function migratePage(page) {
 // identifiants étaient globaux et que la suppression d'un calque effaçait
 // les objets de TOUTES les pages — un modèle incohérent. Pour un jeu de
 // plans, l'attente est un jeu de calques unique.
+// Palette identique à celle d'app.js (LAYER_COLORS) : les calques par page
+// reprenaient tous la première couleur, donc après regroupement les cinq
+// pastilles étaient rouges. On redistribue la palette pour les distinguer.
+const LIFT_COLORS = ['#e05c5c','#f0a030','#50c060','#50b8e0','#a060e0','#e060a0','#80c040','#40a0c0'];
+
 function liftLayersToDocument(data) {
   const layers = [];
   const seen   = new Map();
@@ -130,6 +135,11 @@ function liftLayersToDocument(data) {
     const { layers: _l, activeLayerId: _a, ...rest } = data.pages[key];
     out.pages[key] = rest;
   });
+
+  // Couleurs toutes identiques après regroupement : on redistribue la palette
+  if (layers.length > 1 && new Set(layers.map(l => l.color)).size === 1) {
+    layers.forEach((l, i) => { l.color = LIFT_COLORS[i % LIFT_COLORS.length]; });
+  }
 
   out.layers        = layers;
   out.activeLayerId = activeLayerId ?? layers[0]?.id ?? null;

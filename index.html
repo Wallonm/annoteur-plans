@@ -144,19 +144,39 @@
     }
     .icon-btn:hover { background: var(--panel2); color: var(--text); border-color: var(--accent); }
     .layer-item {
-      display: flex; align-items: center; gap: 5px; padding: 5px 6px;
+      display: flex; align-items: center; gap: 4px; padding: 5px 6px;
       border-radius: 5px; border: 1px solid transparent; cursor: pointer;
       transition: all .15s; position: relative;
     }
     .layer-item:hover { background: var(--panel2); border-color: var(--border); }
     .layer-item.active { background: rgba(124,111,247,.15); border-color: var(--accent); }
-    .layer-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .layer-color {
+      width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; cursor: pointer;
+      position: relative; border: 1px solid rgba(0,0,0,.35); box-shadow: 0 0 0 1px rgba(255,255,255,.08);
+    }
+    .layer-color:hover { transform: scale(1.25); }
+    .layer-color-input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; border: none; padding: 0; cursor: pointer; }
+    /* Compteur d'objets de ce calque SUR LA PAGE AFFICHÉE */
+    .layer-count {
+      font-size: 10px; font-variant-numeric: tabular-nums; min-width: 16px; text-align: center;
+      padding: 0 4px; border-radius: 8px; background: var(--panel2); color: var(--text-dim); flex-shrink: 0;
+    }
+    .layer-count.zero { opacity: .35; }
+    .layer-item.empty-here .layer-name { opacity: .45; font-style: italic; }
+    .layers-note { font-size: 10px; color: var(--text-dim); padding: 4px 6px; font-style: italic; }
+    .icon-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
     .layer-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .layer-name-input {
       flex: 1; background: var(--panel2); border: 1px solid var(--accent); color: var(--text);
       border-radius: 3px; padding: 1px 4px; font-size: 12px; outline: none;
     }
-    .layer-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 1px; line-height: 1; }
+    /* Largeur fixe et compacte : le nom du calque doit rester lisible dans
+       une barre latérale de 240 px (les suffixes « (p.4) » distinguent les
+       calques hérités du format 1.1). */
+    .layer-btn {
+      background: none; border: none; color: var(--text-dim); cursor: pointer;
+      font-size: 11px; padding: 0; line-height: 1; width: 16px; text-align: center; flex-shrink: 0;
+    }
     .layer-btn:hover { color: var(--text); }
     .layer-btn.locked { color: var(--danger); }
     .layer-btn.hidden { color: var(--text-dim); opacity: .5; }
@@ -541,8 +561,12 @@
     <!-- Panneau Calques -->
     <div id="panel-layers" class="sidebar-panel active" role="tabpanel" aria-labelledby="tab-layers">
       <div class="panel-header">
-        <span class="panel-title">Calques</span>
-        <button class="icon-btn" id="btn-add-layer" title="Nouveau calque">+</button>
+        <span class="panel-title">Calques<span id="layers-page-label"></span></span>
+        <span>
+          <button class="icon-btn" id="btn-layers-page-filter" aria-pressed="false"
+                  title="N&rsquo;afficher que les calques pr&eacute;sents sur cette page">Cette page</button>
+          <button class="icon-btn" id="btn-add-layer" title="Nouveau calque">+</button>
+        </span>
       </div>
       <div id="layers-list"></div>
     </div>

@@ -1,5 +1,44 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.6.1 — Calques : repère de page et couleur
+
+Depuis le lot 3 les calques sont globaux au document. Bonne chose pour la
+cohérence, mais le panneau listait cinq calques identiques sur chaque page,
+sans indiquer lesquels servaient *ici*.
+
+### Ajouté
+
+- **Compteur par calque** du nombre d'objets **sur la page affichée**, et titre
+  de panneau « CALQUES — p. 4/7 ». Les calques sans objet sur la page sont
+  estompés et mis en italique.
+- **Filtre « Cette page »** : n'affiche que les calques présents sur la page
+  courante (le calque actif reste visible, on doit savoir où l'on dessine).
+  Le choix est mémorisé d'une session à l'autre, une note rappelle combien de
+  calques du document sont masqués.
+- **Couleur de la pastille modifiable** : un clic sur la pastille ouvre le
+  sélecteur du système. Aperçu en direct pendant le glissé, **une seule entrée
+  d'annulation** au relâchement (même précaution que le curseur d'opacité).
+
+### Corrigé
+
+- À la conversion d'un projet 1.1, les calques par page reprenaient tous la
+  première couleur de la palette : une fois regroupés, les cinq pastilles
+  étaient rouges. La palette est désormais redistribuée.
+- Le bouton ✏️ faisait doublon avec le double-clic sur le nom et consommait la
+  largeur du libellé : dans une barre de 240 px les noms étaient tronqués à
+  « Ann… », précisément là où les suffixes « (p.4) » servaient à distinguer les
+  calques. Bouton retiré, libellé passé de 35 à 114 px.
+
+### Ce qui n'a pas été fait
+
+Le panneau n'est **pas** chapitré par page : un calque peut porter des objets
+sur plusieurs pages, il apparaîtrait alors sous plusieurs chapitres — et un
+calque par page est le modèle incohérent corrigé au lot 3.
+
+Vérifié sur le projet réel (132 annotations, 7 pages) : page 4, seul
+« Annotations (p.4) » affiche 60, les quatre autres 0.
+
+
 ## v1.6.0 — Lot 5 : Outils métier
 
 Les mesures ne vivaient que dans le dessin : impossible de les reprendre dans un devis.

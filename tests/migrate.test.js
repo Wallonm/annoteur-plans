@@ -261,3 +261,26 @@ test('liftLayersToDocument : les homonymes sont suffixés par leur page d’orig
                    ['Annotations', 'Annotations (p.3)', 'Annotations (p.4)', 'Réseaux']);
   assert.deepEqual(data.layers.map(l => l.id), [1, 2, 3, 4], 'les identifiants sont intacts');
 });
+
+test('liftLayersToDocument : couleurs redistribuées quand elles sont identiques', () => {
+  const { data } = liftLayersToDocument({
+    pages: {
+      1: { layers: [{ id: 1, name: 'Annotations', color: '#e05c5c' }] },
+      2: { layers: [{ id: 2, name: 'Annotations', color: '#e05c5c' }] },
+      3: { layers: [{ id: 3, name: 'Annotations', color: '#e05c5c' }] },
+    },
+  });
+  const couleurs = data.layers.map(l => l.color);
+  assert.equal(new Set(couleurs).size, 3, 'chaque calque doit être distinguable');
+  assert.equal(couleurs[0], '#e05c5c');
+});
+
+test('liftLayersToDocument : couleurs déjà distinctes conservées', () => {
+  const { data } = liftLayersToDocument({
+    pages: {
+      1: { layers: [{ id: 1, name: 'A', color: '#111111' }] },
+      2: { layers: [{ id: 2, name: 'B', color: '#222222' }] },
+    },
+  });
+  assert.deepEqual(data.layers.map(l => l.color), ['#111111', '#222222']);
+});

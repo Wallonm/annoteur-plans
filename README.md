@@ -38,7 +38,7 @@ hors ligne**, y compris sur chantier sans réseau.
 node --test "tests/*.test.js"
 ```
 
-41 tests, aucune dépendance à installer. Ils couvrent la géométrie des cotes,
+43 tests, aucune dépendance à installer. Ils couvrent la géométrie des cotes,
 les conversions d'échelle, la rotation de page, la migration des projets (avec
 un projet réel en fixture) et le format d'export CSV.
 
@@ -73,6 +73,15 @@ un message indiquant ce qui a été fait.
 
 Dans les deux cas la page exportée conserve la taille physique du plan source,
 donc l'impression à l'échelle est exacte.
+
+## Calques
+
+Les calques appartiennent au **document**, pas à la page : un même calque peut
+porter des annotations sur plusieurs pages. Le panneau indique donc, pour chacun,
+combien d'objets il contient **sur la page affichée** ; ceux qui n'y ont rien
+sont estompés, et le bouton *Cette page* les masque complètement.
+
+Un clic sur la pastille de couleur change le repère du calque.
 
 ## Raccourcis
 
