@@ -38,12 +38,14 @@ hors ligne**, y compris sur chantier sans réseau.
 node --test "tests/*.test.js"
 ```
 
-47 tests, aucune dépendance à installer. Ils couvrent la géométrie des cotes,
+52 tests, aucune dépendance à installer. Ils couvrent la géométrie des cotes,
 les conversions d'échelle, la saisie manuelle des cotes, la rotation de page,
-la migration des projets (avec un projet réel en fixture) et le format d'export CSV.
+la migration des projets (avec un projet réel en fixture), le format d'export CSV
+et les conversions de l'export vectoriel.
 
-Un test bout en bout dans un vrai navigateur (`tests/e2e/`) vérifie la saisie
-manuelle des cotes et la recoloration des symboles existants. Il demande
+Un test bout en bout dans un vrai navigateur (`tests/e2e/`, 16 vérifications)
+couvre la saisie manuelle des cotes, la recoloration des symboles existants,
+l'édition des bulles, la calibration multi-pages et l'export d'un calque masqué. Il demande
 Playwright et Chromium, voir l'en-tête du fichier.
 
 ## Cotes

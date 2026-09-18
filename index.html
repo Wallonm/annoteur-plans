@@ -745,6 +745,23 @@
   </div>
 </div>
 
+<!-- Modal texte d'une bulle de renvoi -->
+<div class="modal-backdrop" id="modal-leader-text" role="dialog" aria-modal="true" aria-labelledby="modal-leader-text-title">
+  <div class="modal">
+    <h2 id="modal-leader-text-title">💬 Texte de la bulle</h2>
+    <div class="modal-body">
+      <label for="leader-text-input">Texte
+        <textarea id="leader-text-input" rows="3" style="width:100%;margin-top:3px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px;font:inherit;resize:vertical"></textarea>
+      </label>
+      <div style="font-size:11px;color:var(--text-dim)">Ctrl+Entrée pour valider. Retour à la ligne avec Entrée.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="leader-text-cancel">Annuler</button>
+      <button class="modal-btn confirm" id="leader-text-confirm">Appliquer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal calibration par échelle -->
 <div class="modal-backdrop" id="modal-calib-scale" role="dialog" aria-modal="true" aria-labelledby="modal-calib-scale-title">
   <div class="modal">

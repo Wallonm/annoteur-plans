@@ -429,10 +429,9 @@ function toolAreaPoly_down(pt) {
 
   // Segment de preview
   if (App.draw.previewLine) fc.remove(App.draw.previewLine);
-  const prev = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
+  const prev = new fabric.Line([pt.x, pt.y, pt.x, pt.y], tempProps({
     stroke: '#2090ff', strokeWidth: 1.5, strokeDashArray: [5, 3],
-    selectable: false, evented: false,
-  });
+  }));
   fc.add(prev);
   App.draw.previewLine = prev;
 
@@ -440,10 +439,9 @@ function toolAreaPoly_down(pt) {
   if (App.draw.points.length >= 2) {
     const a = App.draw.points[App.draw.points.length - 2];
     const b = App.draw.points[App.draw.points.length - 1];
-    const seg = new fabric.Line([a.x, a.y, b.x, b.y], {
+    const seg = new fabric.Line([a.x, a.y, b.x, b.y], tempProps({
       stroke: '#2090ff', strokeWidth: 1.5, strokeDashArray: [5, 3],
-      selectable: false, evented: false,
-    });
+    }));
     fc.add(seg);
     App.draw.areaSegs = App.draw.areaSegs || [];
     App.draw.areaSegs.push(seg);
@@ -456,10 +454,12 @@ function toolAreaPoly_finish(fc) {
   if (pts.length < 3) { _areaPolyCleanup(fc); return; }
 
   // Ajouter le segment de fermeture
-  const closing = new fabric.Polygon(pts.map(p => ({ x: p.x, y: p.y })), {
+  // Balisé temporaire : sans data.temp, un tampon posé pendant que le polygone
+  // était affiché le sérialisait dans la page et l'historique (v1.7).
+  const closing = new fabric.Polygon(pts.map(p => ({ x: p.x, y: p.y })), tempProps({
     fill: 'rgba(32,144,255,0.08)', stroke: '#2090ff', strokeWidth: 1.5,
-    strokeDashArray: [5, 3], selectable: false, evented: false,
-  });
+    strokeDashArray: [5, 3],
+  }));
 
   // Retirer les segments provisoires
   _areaPolyCleanup(fc);

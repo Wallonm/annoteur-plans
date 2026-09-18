@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.8.0';   // Saisie manuelle des cotes, style des objets composés
+const APP_VERSION  = '1.8.1';   // Correctifs de l'audit du 18/09 (export vectoriel, calibration, bulles)
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -162,9 +162,14 @@ function serializePage(pageNum = App.currentPage) {
 // Retire du `data` sérialisé tout ce qui ne doit pas être persisté
 // (références vers des objets Fabric vivants, caches internes)
 function stripVolatileData(obj) {
-  if (!obj?.data) return obj;
+  // `visible` / `selectable` / `evented` reflètent l'état du CALQUE au moment
+  // de la sérialisation (masqué, verrouillé) : il est réappliqué au chargement
+  // par applyAllLayerStates. Persister `visible:false` faisait disparaître de
+  // l'export les objets d'un calque masqué puis coché (v1.7).
+  const { visible, selectable, evented, ...rest } = obj || {};
+  if (!obj?.data) return rest;
   const { dimGroup, polyObj, _lastCenter, ...cleanData } = obj.data;
-  return { ...obj, data: cleanData };
+  return { ...rest, data: cleanData };
 }
 
 // Marque le document comme modifié (déclenche autosave + garde-fou fermeture)
@@ -594,6 +599,13 @@ function handleDblClick(opt) {
   if (target?.data?.type === 'dimension' && !App.draw.active && App.draw.step === 0
       && target.selectable !== false) {
     openDimValueModal(target);
+    return;
+  }
+  // Double-clic sur une bulle de renvoi : son texte est dans un groupe, que
+  // Fabric ne sait pas éditer en place → fenêtre de saisie.
+  if (target?.data?.type === 'leader' && !App.draw.active && App.draw.step === 0
+      && target.selectable !== false) {
+    openLeaderTextModal(target);
     return;
   }
   if (App.activeTool === 'polyline')  toolPolyline_finish();
@@ -1382,6 +1394,36 @@ function applyDimensionInput(group, text) {
   }
 }
 
+// ============================================================
+// TEXTE D'UNE BULLE DE RENVOI
+// ============================================================
+function leaderTextObject(group) {
+  return group?.getObjects?.().find(o => o.type === 'textbox' || o.type === 'i-text' || o.type === 'text') || null;
+}
+
+function openLeaderTextModal(group) {
+  const txt = leaderTextObject(group);
+  if (!txt) return;
+  App._pendingLeaderGroup = group;
+  document.getElementById('leader-text-input').value = txt.text || '';
+  openModal('modal-leader-text');
+}
+
+function applyLeaderText(group, text) {
+  const txt = leaderTextObject(group);
+  if (!txt) return false;
+  const value = String(text ?? '').trim();
+  if (!value) { showToast('Le texte de la bulle ne peut pas être vide'); return false; }
+  if (value === txt.text) return true;
+  txt.set('text', value);
+  group.set('dirty', true);
+  group.addWithUpdate();          // recalcule l'emprise du groupe (le texte a changé de largeur)
+  group.setCoords();
+  App.canvas.requestRenderAll();
+  saveHistoryState();
+  return true;
+}
+
 // Fenêtre de saisie (double-clic sur une cote)
 function openDimValueModal(group) {
   if (group?.data?.type !== 'dimension') return;
@@ -1675,9 +1717,30 @@ function applyCalibrationToAllPages() {
   for (let p = 1; p <= App.totalPages; p++) {
     if (p === App.currentPage || !App.pageData[p]) continue;
     App.pageData[p].calibration = { ...calib };
+    refreshSerializedLabels(p, calib);
     n++;
   }
   if (n) { markDirty(); showToast(`Échelle appliquée à ${n} autre(s) page(s)`); }
+}
+
+// Met à jour, dans les objets SÉRIALISÉS d'une page non affichée, les
+// étiquettes qui dépendent de la calibration (cotes, surfaces). Sans cela une
+// page cotée avant « Appliquer à toutes les pages » gardait ses « 123 pt »
+// jusqu'à ce qu'on la recalibre elle-même (v1.7).
+function refreshSerializedLabels(pageNum, calib) {
+  const objs = App.pageData[pageNum]?.objects;
+  if (!Array.isArray(objs)) return;
+  objs.forEach(o => {
+    const t = o.data?.type;
+    if (t === 'dimension' && Array.isArray(o.objects)) {
+      const len = o.data.pointLength ?? o.data.pixelLength;
+      const txt = o.objects.find(c => c.type === 'text');
+      if (txt && len != null) txt.text = formatDimension(len, calib);
+    } else if (t === 'areaLabel' && o.data.areaPt2 != null) {
+      o.text = `${formatArea(o.data.areaPt2, calib)}\n` +
+               `${formatDimension(o.data.perimeterPt, calib)} de périmètre`;
+    }
+  });
 }
 
 function updateCalibrationUI() {
@@ -2280,7 +2343,12 @@ function applyLayerPropsToObj(obj) {
 let layersRefreshTimer = null;
 function scheduleLayersRefresh() {
   clearTimeout(layersRefreshTimer);
-  layersRefreshTimer = setTimeout(renderLayersList, 50);
+  layersRefreshTimer = setTimeout(() => {
+    renderLayersList();
+    // Le total de comptage dépend des mêmes événements (ajout, suppression,
+    // annulation, changement de page) : il ne suivait que le clic de pose (v1.7).
+    if (typeof updateCountBadge === 'function') updateCountBadge();
+  }, 50);
 }
 
 // Nombre d'objets d'un calque SUR LA PAGE COURANTE.
@@ -2782,7 +2850,18 @@ async function loadProject(jsonStr) {
   try {
     App.nextLayerId = data.nextLayerId || 1;
 
-    // Restaurer les données de pages (calibration, rotation, objets, calques)
+    // Le projet REMPLACE l'état courant : les annotations, l'historique et le
+    // presse-papiers du document ouvert n'ont plus cours. En v1.7 les pages
+    // absentes du projet gardaient leurs objets, et Ctrl+Z ressuscitait l'ancien état.
+    App.canvas.discardActiveObject();
+    resetDrawState();
+    App.history   = {};
+    App.clipboard = null;
+    for (let pn = 1; pn <= App.totalPages; pn++) {
+      if (App.pageData[pn]) { App.pageData[pn].objects = []; delete App.pageData[pn].calibration; }
+    }
+
+    // Restaurer les données de pages (calibration, rotation, objets)
     Object.keys(data.pages).forEach(p => {
       const pn = Number(p);
       if (!Number.isFinite(pn) || pn < 1 || pn > App.totalPages) return;  // page hors document
@@ -4000,6 +4079,25 @@ function initModals() {
     if (e.key === 'Enter') { e.preventDefault(); confirmDimValue(); }
   });
 
+  // --- Modal texte d'une bulle de renvoi ---
+  const leaderModal = document.getElementById('modal-leader-text');
+  const leaderInput = document.getElementById('leader-text-input');
+  const confirmLeaderText = () => {
+    const group = App._pendingLeaderGroup;
+    if (!group || applyLeaderText(group, leaderInput.value)) {
+      App._pendingLeaderGroup = null;
+      closeModal(leaderModal);
+    } else { leaderInput.focus(); }
+  };
+  document.getElementById('leader-text-confirm').addEventListener('click', confirmLeaderText);
+  document.getElementById('leader-text-cancel').addEventListener('click', () => {
+    App._pendingLeaderGroup = null;
+    closeModal(leaderModal);
+  });
+  leaderInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); confirmLeaderText(); }
+  });
+
   // --- Modal calibration par échelle ---
   document.getElementById('scale-preset').addEventListener('change', (e) => {
     document.getElementById('custom-scale-label').style.display =
@@ -4096,7 +4194,7 @@ function openModal(id) {
   modal.classList.add('open');
   // Focus sur le premier champ ou bouton utile
   setTimeout(() => {
-    const first = modal.querySelector('input:not([type=hidden]), select, button.confirm');
+    const first = modal.querySelector('input:not([type=hidden]), textarea, select, button.confirm');
     first?.focus();
     if (first?.select) first.select();
   }, 30);

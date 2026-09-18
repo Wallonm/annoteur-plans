@@ -1,5 +1,52 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.8.1 — Correctifs de l'audit du 18/09/2026
+
+Tout ce qui est listé en P1 et P2 dans `AUDIT-2026-09-18.md`, sauf la
+déformation des symboles (voir plus bas).
+
+### Corrigé
+
+- **Export vectoriel.** La pointe de flèche des bulles de renvoi sortait du PDF
+  (`fabric.Triangle` sans conversion). Le séparateur de milliers français
+  (U+202F) et l'espace insécable devant l'unité étaient rendus « ? » : une cote
+  de 1 500 mm s'exportait « 1?500,00 mm ». Une image importée puis pivotée était
+  décalée (pdf-lib pivote autour du coin bas-gauche, l'export lui donnait le coin
+  haut-gauche). Les cadres de tampons sortaient à angles droits.
+- **Calques masqués.** `visible`, `selectable` et `evented` reflétaient l'état du
+  calque au moment de la sauvegarde et étaient persistés avec chaque objet : un
+  calque masqué puis coché à l'export n'en sortait pas, et une page non visitée
+  depuis le masquage se comportait autrement. Ces trois drapeaux ne sont plus
+  sérialisés, l'état du calque est réappliqué au chargement.
+- **Calibration « toutes les pages »** ne touchait que la valeur de calibration :
+  les cotes et surfaces des pages non affichées gardaient leur ancienne
+  étiquette (« 123 pt ») tant qu'on n'y recalibrait pas. Les étiquettes
+  sérialisées sont maintenant recalculées page par page.
+- **Mesure libre.** Les segments et le polygone temporaires n'étaient pas balisés
+  `temp` : poser un tampon pendant que la surface était affichée les
+  sérialisait dans la page et l'historique.
+- **Bulle de renvoi.** Le texte « Annotation » ne pouvait pas être modifié
+  (texte dans un groupe, que Fabric n'édite pas en place). Double-clic sur la
+  bulle ouvre une fenêtre de saisie, Ctrl+Entrée valide.
+- **Ouvrir un projet** fusionnait avec l'état courant : les objets des pages
+  absentes du projet restaient, et Ctrl+Z ressuscitait l'état d'avant
+  l'ouverture. Le projet remplace désormais annotations, calibrations,
+  historique et presse-papiers.
+- Le total du panneau Relevé ne suivait que le clic de pose : il suit
+  maintenant suppressions, annulations, changements de page et chargements.
+
+### Tests
+
+52 tests unitaires (+5 sur l'export vectoriel), 16 vérifications bout en bout.
+
+### Non traité
+
+- Déformation anisotrope d'une vingtaine de symboles calibrés : corriger
+  demande de trancher entre les cotes réelles déclarées et le dessin du
+  viewBox, symbole par symbole. À faire avec le catalogue sous les yeux.
+- Accessibilité (P3 de l'audit), retrait de `projet.annot.json` du dépôt.
+
+
 ## v1.8.0 — Saisie manuelle des cotes, style des objets composés
 
 ### Ajouté

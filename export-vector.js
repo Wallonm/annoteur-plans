@@ -32,10 +32,35 @@ function fabricToLocalPath(obj) {
     }
     case 'rect': {
       const x = -w / 2, y = -h / 2;
-      cmds.push({ c: 'M', p: [{ x,     y }] },
-                { c: 'L', p: [{ x: x + w, y }] },
-                { c: 'L', p: [{ x: x + w, y: y + h }] },
-                { c: 'L', p: [{ x,     y: y + h }] },
+      // Coins arrondis (cadre des tampons) : rx/ry bornés à la moitié du côté,
+      // chaque quart de cercle approché par une cubique, comme Fabric le trace.
+      const rx = Math.min(obj.rx || 0, w / 2), ry = Math.min(obj.ry || 0, h / 2);
+      if (rx > 0 && ry > 0) {
+        const kx = rx * (1 - KAPPA), ky = ry * (1 - KAPPA);
+        cmds.push({ c: 'M', p: [{ x: x + rx, y }] },
+                  { c: 'L', p: [{ x: x + w - rx, y }] },
+                  { c: 'C', p: [{ x: x + w - kx, y }, { x: x + w, y: y + ky }, { x: x + w, y: y + ry }] },
+                  { c: 'L', p: [{ x: x + w, y: y + h - ry }] },
+                  { c: 'C', p: [{ x: x + w, y: y + h - ky }, { x: x + w - kx, y: y + h }, { x: x + w - rx, y: y + h }] },
+                  { c: 'L', p: [{ x: x + rx, y: y + h }] },
+                  { c: 'C', p: [{ x: x + kx, y: y + h }, { x, y: y + h - ky }, { x, y: y + h - ry }] },
+                  { c: 'L', p: [{ x, y: y + ry }] },
+                  { c: 'C', p: [{ x, y: y + ky }, { x: x + kx, y }, { x: x + rx, y }] },
+                  { c: 'Z' });
+      } else {
+        cmds.push({ c: 'M', p: [{ x,     y }] },
+                  { c: 'L', p: [{ x: x + w, y }] },
+                  { c: 'L', p: [{ x: x + w, y: y + h }] },
+                  { c: 'L', p: [{ x,     y: y + h }] },
+                  { c: 'Z' });
+      }
+      break;
+    }
+    case 'triangle': {
+      // Pointe de flèche des bulles de renvoi (fabric.Triangle : sommet en haut)
+      cmds.push({ c: 'M', p: [{ x: -w / 2, y:  h / 2 }] },
+                { c: 'L', p: [{ x:  0,     y: -h / 2 }] },
+                { c: 'L', p: [{ x:  w / 2, y:  h / 2 }] },
                 { c: 'Z' });
       break;
     }
@@ -108,9 +133,12 @@ function effectiveStrokeWidth(obj) {
 // (flèches, symboles mathématiques) sont remplacés plutôt que de faire
 // échouer tout l'export.
 // ------------------------------------------------------------
+// Espaces typographiques produits par toLocaleString('fr-FR') (U+202F entre
+// les milliers, U+00A0 devant l'unité) : hors WinAnsi, rendus « ? » en v1.7.
+const SPACE_LIKE = /[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g;
 function sanitizeForFont(text, font) {
   let out = '';
-  for (const ch of text) {
+  for (const ch of String(text).replace(SPACE_LIKE, ' ')) {
     try { font.encodeText(ch); out += ch; }
     catch { out += ch === '→' ? '->' : ch === '←' ? '<-' : '?'; }
   }
@@ -153,7 +181,9 @@ async function exportPdfVector(selectedLayerIds, onProgress) {
 
     const live = await enliven(objs);
     const ctx  = { page: pdfLibPage, toPdf, fontRegular, fontBold, imageJobs: [] };
-    live.forEach(o => drawObject(o, ctx, 1));
+    // Un calque masqué à l'écran mais coché à l'export doit sortir : `visible`
+    // n'est qu'un état d'affichage (et serializePage ne le persiste plus).
+    live.forEach(o => { o.visible = true; drawObject(o, ctx, 1); });
 
     // Les images importées sont matricielles : elles sont incorporées telles
     // quelles, après la passe vectorielle (l'incorporation est asynchrone).
@@ -321,7 +351,9 @@ function drawImageObject(obj, ctx, opacity) {
     const w   = Math.hypot(tr.x - tl.x, tr.y - tl.y);
     const h   = Math.hypot(bl.x - tl.x, bl.y - tl.y);
     const ang = Math.atan2(tr.y - tl.y, tr.x - tl.x);
-    ctx.imageJobs.push({ dataUrl, x: tl.x, y: tl.y - h, width: w, height: h, ang, opacity });
+    // pdf-lib pivote autour de (x, y), coin bas-gauche de l'image : c'est donc
+    // le coin bas-gauche réel qu'il faut lui donner (en v1.7 : tl.y - h, juste à angle nul).
+    ctx.imageJobs.push({ dataUrl, x: bl.x, y: bl.y, width: w, height: h, ang, opacity });
   } catch (err) {
     console.warn('Image non exportée :', err);
   }

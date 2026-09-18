@@ -32,7 +32,7 @@ const server = http.createServer((q, r) => {
   // PDF A4 vierge généré dans la page avec pdf-lib (déjà chargé par l'app)
   await page.evaluate(async () => {
     const { PDFDocument } = window.PDFLib;
-    const doc = await PDFDocument.create(); doc.addPage([595.28, 841.89]);
+    const doc = await PDFDocument.create(); doc.addPage([595.28, 841.89]); doc.addPage([595.28, 841.89]);
     const bytes = await doc.save();
     await loadPDF(new File([bytes], 'test.pdf', { type: 'application/pdf' }));
   });
@@ -159,6 +159,64 @@ const server = http.createServer((q, r) => {
   console.log(histAfter - histBefore === 1 ? 'OK  historique : 1 entrée pour un glissé de couleur' : `FAIL historique +${histAfter - histBefore}`);
 
   await page.screenshot({ path: path.join(require('os').tmpdir(), 'annoteur-e2e.png') });
+  // ---- v1.8.1 : correctifs de l'audit --------------------------------------
+  // Bulle de renvoi : texte éditable via la modale, pointe exportée en vectoriel
+  await page.evaluate(() => { App.canvas.discardActiveObject(); createLeader({ x: 100, y: 400 }, { x: 180, y: 360 }); });
+  await page.evaluate(() => { const g = App.canvas.getObjects().find(o => o.data?.type === 'leader'); openLeaderTextModal(g); });
+  await page.fill('#leader-text-input', 'Prise à déplacer');
+  await page.click('#leader-text-confirm');
+  const leaderTxt = await page.evaluate(() => leaderTextObject(App.canvas.getObjects().find(o => o.data?.type === 'leader')).text);
+  console.log(leaderTxt === 'Prise à déplacer' ? 'OK  texte de bulle modifié via la modale' : 'FAIL bulle ' + leaderTxt);
+
+  // Mesure libre : le polygone temporaire ne doit pas être sérialisé par un tampon posé pendant qu'il est affiché
+  await page.evaluate(() => {
+    setActiveTool('areapoly');
+    [{ x: 300, y: 500 }, { x: 400, y: 500 }, { x: 400, y: 600 }].forEach(p => toolAreaPoly_down(p));
+    toolAreaPoly_finish(App.canvas);
+    placeStamp(STAMPS[0].id);                 // saveHistoryState pendant l'overlay
+  });
+  const leaked = await page.evaluate(() => (App.pageData[1].objects || []).filter(o => o.type === 'polygon' && o.stroke === '#2090ff').length);
+  console.log(leaked === 0 ? 'OK  polygone de mesure libre non sérialisé' : 'FAIL fuite mesure libre ' + leaked);
+  await page.evaluate(() => { setActiveTool('select'); });
+
+  // Calque masqué : `visible` n'est plus persisté, et l'export vectoriel sort les objets du calque coché
+  const hidden = await page.evaluate(async () => {
+    const layer = App.layers[0];
+    toggleLayerVisibility(layer.id);
+    saveCurrentPageObjects();
+    const persisted = App.pageData[1].objects.some(o => 'visible' in o);
+    const bytesHidden = await exportPdfVector([layer.id]);
+    const bytesNone   = await exportPdfVector([]);
+    toggleLayerVisibility(layer.id);
+    return { persisted, delta: bytesHidden.length - bytesNone.length };
+  });
+  console.log(!hidden.persisted && hidden.delta > 500 ? `OK  calque masqué exporté quand même (+${hidden.delta} o)` : 'FAIL calque masqué ' + JSON.stringify(hidden));
+
+  // Calibration « toutes les pages » : les étiquettes de la page 1 sont recalculées depuis la page 2
+  const allPages = await page.evaluate(async () => {
+    await switchPage(2);
+    setPageCalibration(scaleToPointsPerUnit(50, 'cm'), 'cm');    // 1:50 au lieu de 1:100
+    applyCalibrationToAllPages();
+    const dim = App.pageData[1].objects.find(o => o.data?.type === 'dimension');
+    const txt = dim.objects.find(c => c.type === 'text').text;
+    await switchPage(1);
+    const live = dimensionValueText(App.canvas.getObjects().find(o => o.data?.type === 'dimension'));
+    return { txt, live };
+  });
+  console.log(allPages.txt === '125,00 cm' && allPages.live === '125,00 cm' ? 'OK  calibration toutes pages : 250 cm à 1:100 → 125 cm à 1:50' : 'FAIL calibration toutes pages ' + JSON.stringify(allPages));
+
+  // loadProject remplace l'état : objets des pages absentes du projet et historique effacés
+  const replaced = await page.evaluate(async () => {
+    const proj = JSON.parse(JSON.stringify(buildProjectData()));
+    delete proj.pages['1'].objects; proj.pages['1'].objects = [];   // le projet ne contient plus rien en page 1
+    proj.pages['2'] = { objects: [] };
+    const before = App.canvas.getObjects().filter(o => !isTempObject(o)).length;
+    await loadProject(JSON.stringify(proj));
+    await new Promise(r => setTimeout(r, 300));
+    return { before, after: App.canvas.getObjects().filter(o => !isTempObject(o)).length, hist: App.history[1]?.stack.length || 0 };
+  });
+  console.log(replaced.before > 0 && replaced.after === 0 && replaced.hist <= 1 ? 'OK  loadProject remplace l’état (objets et historique)' : 'FAIL loadProject ' + JSON.stringify(replaced));
+
   const realErrors = errors.filter(e => !/favicon|404/.test(e));
   console.log('Erreurs JS :', realErrors.length ? realErrors : 'aucune');
   if (realErrors.length) process.exitCode = 1;
