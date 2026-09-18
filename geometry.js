@@ -141,6 +141,49 @@ function formatArea(areaPt2, calib) {
   return `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${unit}²`;
 }
 
+// --- Saisie manuelle d'une cote ------------------------------
+// Redimensionne une cote existante à une longueur donnée (en points) :
+// p1 et la direction sont conservés, p2 glisse le long de l'axe, et la
+// ligne de cote garde son écartement perpendiculaire.
+function resizeDimension(p1, p2, offsetPt, newLengthPt) {
+  if (!(newLengthPt > 0)) throw new Error('Longueur de cote invalide');
+  const dx  = p2.x - p1.x, dy = p2.y - p1.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) throw new Error('Cote de longueur nulle : direction indéterminée');
+  const ux = dx / len, uy = dy / len;        // axe de la cote
+  const nx = -uy,      ny = ux;              // normale (même convention que computeDimGeometry)
+
+  // Écartement perpendiculaire actuel de la ligne de cote
+  const off = offsetPt ? (offsetPt.x - p1.x) * nx + (offsetPt.y - p1.y) * ny : 0;
+
+  const newP2  = { x: p1.x + ux * newLengthPt, y: p1.y + uy * newLengthPt };
+  const mid    = { x: (p1.x + newP2.x) / 2,    y: (p1.y + newP2.y) / 2 };
+  const newOff = { x: mid.x + nx * off,         y: mid.y + ny * off };
+  return { p1: { ...p1 }, p2: newP2, offsetPt: newOff };
+}
+
+// Interprète une saisie utilisateur (« 4,20 », « 4.2 m », « 350 cm », « 120 pt »)
+// et la convertit en points PDF selon la calibration de la page.
+// Sans unité explicite : unité de la calibration (ou points si non calibré).
+// Retourne null si la saisie est illisible ou l'unité inconvertible.
+function parseLengthInput(str, calib) {
+  if (typeof str !== 'string') return null;
+  const m = str.trim().toLowerCase().replace(/\s+/g, ' ')
+    .match(/^(-?\d+(?:[.,]\d+)?)\s*(m|cm|mm|pt)?$/);
+  if (!m) return null;
+  const value = parseFloat(m[1].replace(',', '.'));
+  if (!(value > 0)) return null;
+  const unit = m[2];
+
+  if (unit === 'pt') return value;
+  if (!calib || !calib.pointsPerUnit) return unit ? null : value;   // non calibré : points bruts
+
+  const targetUnit = unit || calib.unit;
+  const mmPerTarget = MM_PER_UNIT[targetUnit], mmPerCalib = MM_PER_UNIT[calib.unit];
+  if (!mmPerTarget || !mmPerCalib) return null;
+  return value * (mmPerTarget / mmPerCalib) * calib.pointsPerUnit;
+}
+
 // --- Surfaces et longueurs -----------------------------------
 
 // Aire d'un polygone (formule du lacet), toujours positive
@@ -204,6 +247,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normV, computeDimGeometry, dimTextAngle, normalizeAngle, makeRevisionCloudPath,
     scaleToPointsPerUnit, pointsPerUnitToScale, formatDimension, formatArea,
     polygonArea, pathLength, rotatePoint90, constrainAngle, nearestPoint,
+    resizeDimension, parseLengthInput,
     MM_PER_POINT, MM_PER_UNIT,
   };
 }

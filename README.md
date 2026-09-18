@@ -38,9 +38,22 @@ hors ligne**, y compris sur chantier sans réseau.
 node --test "tests/*.test.js"
 ```
 
-43 tests, aucune dépendance à installer. Ils couvrent la géométrie des cotes,
-les conversions d'échelle, la rotation de page, la migration des projets (avec
-un projet réel en fixture) et le format d'export CSV.
+47 tests, aucune dépendance à installer. Ils couvrent la géométrie des cotes,
+les conversions d'échelle, la saisie manuelle des cotes, la rotation de page,
+la migration des projets (avec un projet réel en fixture) et le format d'export CSV.
+
+Un test bout en bout dans un vrai navigateur (`tests/e2e/`) vérifie la saisie
+manuelle des cotes et la recoloration des symboles existants. Il demande
+Playwright et Chromium, voir l'en-tête du fichier.
+
+## Cotes
+
+Trois clics posent une cote : point de départ, point d'arrivée, écartement.
+Pour **ajuster une cote existante à une valeur connue** (lue sur le plan, ou
+mesurée sur place) : double-clic sur la cote, ou champ *Valeur* de la barre de
+style quand elle est sélectionnée. Le point de départ et l'alignement sont
+conservés, le second point est déplacé à la longueur saisie selon la
+calibration de la page. Saisie libre : `4,20`, `4.2 m`, `350 cm`, `120 pt`.
 
 ## Repère de coordonnées
 

@@ -1,6 +1,9 @@
 # PDF sources et exports (volumineux)
 *.pdf
 
+# Archives git de transfert
+*.bundle
+
 # Dépendances
 node_modules/
 

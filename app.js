@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.6.1';   // Calques : repère de page et couleur
+const APP_VERSION  = '1.8.0';   // Saisie manuelle des cotes, style des objets composés
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -586,6 +586,16 @@ function handleMouseUp(opt) {
 }
 
 function handleDblClick(opt) {
+  // Double-clic sur une cote (outil sélection ou mesure) : saisie manuelle de la valeur
+  // (après un premier clic la cote est sélectionnée et ses poignées posées : un
+  // double-clic sur une poignée vise la cote qu'elle contrôle)
+  let target = opt.target || App.canvas.findTarget(opt.e);
+  if (target?.data?.type === 'dimHandle') target = App.activeDimHandles?.dimGroup;
+  if (target?.data?.type === 'dimension' && !App.draw.active && App.draw.step === 0
+      && target.selectable !== false) {
+    openDimValueModal(target);
+    return;
+  }
   if (App.activeTool === 'polyline')  toolPolyline_finish();
   if (App.activeTool === 'polygon')   toolPolygon_finish();
   if (App.activeTool === 'areapoly')  toolAreaPoly_finish(App.canvas);
@@ -1281,16 +1291,7 @@ function rebuildDimensionFromHandles() {
     handles.previewObjs = null;
   }
 
-  const oldData  = handles.dimGroup?.data || {};
-  if (handles.dimGroup) fc.remove(handles.dimGroup);
-
-  // Reconstruire avec la nouvelle géométrie
-  const geo      = computeDimGeometry(p1, p2, off);
-  const savedLay = App.activeLayerId;
-  App.activeLayerId = oldData.layerId || savedLay;
-  const newGroup = buildDimGroupOnCanvas(p1, p2, geo, App.activeLayerId);
-  App.activeLayerId = savedLay;
-  applyLayerPropsToObj(newGroup);
+  const newGroup = replaceDimensionGroup(handles.dimGroup, p1, p2, off);
 
   // Mettre à jour les références dans les poignées
   handles.dimGroup = newGroup;
@@ -1299,6 +1300,98 @@ function rebuildDimensionFromHandles() {
   fc.requestRenderAll();
   saveHistoryState();
   App._rebuildingDim = false;
+}
+
+// Remplace un groupe cote par un nouveau, à la même place dans l'ordre Z,
+// sur le même calque et avec le même style de trait. Ne touche ni à la
+// sélection ni à l'historique : c'est à l'appelant de décider.
+function replaceDimensionGroup(oldGroup, p1, p2, offsetPt) {
+  const fc      = App.canvas;
+  const oldData = oldGroup?.data || {};
+  const objs    = fc.getObjects();
+  const zIndex  = oldGroup ? objs.indexOf(oldGroup) : -1;
+
+  // Conserver la couleur du trait de la cote d'origine (pas celle de l'outil courant)
+  const oldLine = oldGroup?._objects?.find(o => o.type === 'line');
+  const savedTp = App.toolProps;
+  if (oldLine) {
+    App.toolProps = { ...savedTp, strokeColor: oldLine.stroke, dashArray: oldLine.strokeDashArray };
+  }
+  if (oldGroup) fc.remove(oldGroup);
+
+  const geo      = computeDimGeometry(p1, p2, offsetPt);
+  const newGroup = buildDimGroupOnCanvas(p1, p2, geo, oldData.layerId || App.activeLayerId);
+  App.toolProps  = savedTp;
+
+  // buildDimGroupOnCanvas ajoute en fin de pile : remettre à l'ancien rang
+  if (zIndex >= 0) newGroup.moveTo(zIndex);
+  applyLayerPropsToObj(newGroup);
+  return newGroup;
+}
+
+// ============================================================
+// SAISIE MANUELLE D'UNE COTE EXISTANTE
+// ------------------------------------------------------------
+// La valeur saisie redimensionne la cote selon la calibration de la
+// page : le point de départ et l'alignement sont conservés, le second
+// point glisse le long de l'axe. Déclenchée par double-clic sur la cote
+// ou par le champ « Valeur » de la barre de style.
+// ============================================================
+
+// Valeur courante d'une cote, dans l'unité calibrée, telle qu'affichée
+function dimensionValueText(group) {
+  const calib = getPageCalibration();
+  const len   = group?.data?.pointLength ?? group?.data?.pixelLength ?? 0;
+  return formatDimension(len, calib);
+}
+
+// Applique une longueur (en points) à une cote existante. Retourne le nouveau groupe.
+function setDimensionLength(group, lengthPt) {
+  if (group?.data?.type !== 'dimension') return null;
+  const d = group.data;
+  const r = resizeDimension(d.p1, d.p2, d.offsetPt, lengthPt);
+
+  App._rebuildingDim = true;
+  removeDimHandles();
+  const newGroup = replaceDimensionGroup(group, r.p1, r.p2, r.offsetPt);
+  App.canvas.setActiveObject(newGroup);
+  App._rebuildingDim = false;
+  showDimHandles(newGroup);
+  App.canvas.requestRenderAll();
+  saveHistoryState();
+  return newGroup;
+}
+
+// Interprète la saisie et l'applique ; renvoie true si la cote a été modifiée
+function applyDimensionInput(group, text) {
+  const calib    = getPageCalibration();
+  const lengthPt = parseLengthInput(text, calib);
+  if (lengthPt == null) {
+    showToast(calib
+      ? `Valeur illisible — ex. 4,20 ou 350 cm (unité de la page : ${calib.unit})`
+      : 'Page non calibrée : valeur en points, ex. 120');
+    return false;
+  }
+  try {
+    const g = setDimensionLength(group, lengthPt);
+    if (g) showToast(`Cote ajustée à ${dimensionValueText(g)}`);
+    return !!g;
+  } catch (err) {
+    showToast(describeError(err));
+    return false;
+  }
+}
+
+// Fenêtre de saisie (double-clic sur une cote)
+function openDimValueModal(group) {
+  if (group?.data?.type !== 'dimension') return;
+  const calib = getPageCalibration();
+  App._pendingDimGroup = group;
+  document.getElementById('dim-value-input').value = dimensionValueText(group).replace(/\s*(m|cm|mm|pt)$/, '');
+  document.getElementById('dim-value-unit').textContent  = calib ? calib.unit : 'pt';
+  document.getElementById('dim-value-measured').textContent = dimensionValueText(group);
+  document.getElementById('dim-value-hint').style.display = calib ? 'none' : '';
+  openModal('modal-dim-value');
 }
 
 // ============================================================
@@ -2484,29 +2577,19 @@ function getSymbolTargetPxSize(sym) {
 // Ne touche pas aux fills blancs ou transparents (fond des symboles)
 function applySymbolColor(objects, color) {
   if (!color || color === '#000000') return; // noir = couleur SVG d'origine, rien à faire
-  objects.forEach(obj => {
-    if (obj.stroke && obj.stroke !== 'none' && obj.stroke !== '')
-      obj.set('stroke', color);
-    // Fill noir uniquement (poignées, points) → aussi coloré
-    if (obj.fill && obj.fill !== 'none' && obj.fill !== ''
-        && obj.fill !== 'white' && obj.fill !== '#ffffff'
-        && obj.fill !== 'transparent')
-      obj.set('fill', color);
-  });
+  recolorSymbolObjects(objects, color);
 }
 
-function recolorSelectedSymbol(color) {
-  const active = App.canvas?.getActiveObject();
-  if (!active || active.data?.type !== 'symbol') return;
-  const objs = active.getObjects ? active.getObjects() : [active];
-  objs.forEach(obj => {
-    if (obj.stroke && obj.stroke !== 'none' && obj.stroke !== '') obj.set('stroke', color);
-    if (obj.fill && obj.fill !== 'none' && obj.fill !== ''
-        && obj.fill !== 'white' && obj.fill !== '#ffffff'
-        && obj.fill !== 'transparent') obj.set('fill', color);
-  });
-  App.canvas.requestRenderAll();
-  saveHistoryState();
+// Recolore le ou les symboles sélectionnés (sélection multiple comprise).
+// `history = false` pendant le glissé du sélecteur : une seule entrée d'annulation au relâchement.
+function recolorSelectedSymbol(color, history = true) {
+  const fc = App.canvas;
+  if (!fc) return;
+  const symbols = fc.getActiveObjects().filter(o => o.data?.type === 'symbol');
+  if (!symbols.length) return;
+  symbols.forEach(o => applyStyleToObject(o, { stroke: color }));
+  fc.requestRenderAll();
+  if (history) saveHistoryState();
 }
 
 function placeSymbol(symbolId, x, y) {
@@ -3042,6 +3125,7 @@ function resetDrawState() {
   };
   hideIndicator('calib-indicator');
   hideIndicator('measure-indicator');
+  hideIndicator('leader-indicator');
   fc.requestRenderAll();
 }
 
@@ -3378,6 +3462,7 @@ const TOOL_LABELS = {
   freedraw: 'Dessin libre', cloud: 'Nuage de révision', text: 'Texte',
   measure: 'Cote / mesure', calibrate: 'Calibrer la page',
   count: 'Compter (clic par élément)', leader: 'Bulle de renvoi',
+  areapoly: 'Mesure libre (surface / périmètre)',
 };
 
 const OTHER_SHORTCUTS = [
@@ -3462,18 +3547,19 @@ function updatePropsFromSelection() {
   const sel = fc.getActiveObject();
   if (!sel) return;
 
-  // Couleur de contour
-  const stroke = sel.stroke;
+  // Couleur de contour (style effectif : pour un groupe composé, celui des enfants)
+  const st     = effectiveStyle(sel);
+  const stroke = st.stroke;
   if (stroke) {
     document.getElementById('prop-stroke-color').value = rgbToHex(stroke) || '#e53e3e';
     App.toolProps.strokeColor = stroke;
   }
-  if (sel.strokeWidth !== undefined) {
-    document.getElementById('prop-stroke-width').value = sel.strokeWidth;
+  if (st.strokeWidth !== undefined) {
+    document.getElementById('prop-stroke-width').value = st.strokeWidth;
   }
 
   // Remplissage
-  const fill = sel.fill;
+  const fill = st.compound ? 'transparent' : sel.fill;
   const fillMode = document.getElementById('prop-fill-mode');
   const fillColor = document.getElementById('prop-fill-color');
   if (fill && fill !== 'transparent' && fill !== '' && fill !== 'rgba(0,0,0,0)') {
@@ -3523,7 +3609,9 @@ function initStyleBar() {
   const sbFN   = document.getElementById('sb-fill-none');
   const sbTC   = document.getElementById('sb-text-color');
   const sbFS   = document.getElementById('sb-font-size');
-  const sbTG   = sbTC?.closest('.sb-sep + label')?.parentElement;
+  const sbDG   = document.getElementById('sb-dim-group');
+  const sbDV   = document.getElementById('sb-dim-value');
+  const sbDU   = document.getElementById('sb-dim-unit');
 
   function getSelection() { return App.canvas?.getActiveObject(); }
   function isFillTransparent(fill) { return !fill || fill === 'transparent' || fill === 'rgba(0,0,0,0)'; }
@@ -3535,23 +3623,33 @@ function initStyleBar() {
 
     bar.classList.add('visible');
     const isText = obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text';
+    const isDim  = obj.data?.type === 'dimension';
 
-    // Contour
-    if (sbSC) sbSC.value = obj.stroke || '#000000';
-    if (sbSW) sbSW.value = obj.strokeWidth ?? 2;
+    // Contour — pour un groupe (symbole, cote, bulle…) on lit le style effectif des enfants
+    const st = effectiveStyle(obj);
+    if (sbSC) sbSC.value = rgbToHex(st.stroke) || '#000000';
+    if (sbSW) sbSW.value = st.strokeWidth ?? 2;
 
-    // Remplissage
-    const fillTrans = isFillTransparent(obj.fill);
-    if (sbFC) sbFC.value = fillTrans ? '#ffffff' : (obj.fill || '#ffffff');
-    sbFN?.classList.toggle('active', fillTrans);
+    // Remplissage — sans objet pour les groupes composés (le fond blanc des symboles n'est pas un style)
+    const fillTrans = isFillTransparent(st.fill);
+    if (sbFC) { sbFC.value = fillTrans ? '#ffffff' : (rgbToHex(st.fill) || '#ffffff'); sbFC.disabled = st.compound; }
+    if (sbFN) { sbFN.classList.toggle('active', fillTrans); sbFN.disabled = st.compound; }
 
     // Texte
     const textVisible = isText || obj.type === 'areaLabel';
-    const textSection = bar.querySelectorAll('.sb-sep:last-of-type, .sb-sep:last-of-type ~ *');
+    const textSection = bar.querySelectorAll(':scope > .sb-sep:last-of-type, :scope > .sb-sep:last-of-type ~ *');
     textSection.forEach(el => { el.style.display = textVisible ? '' : 'none'; });
     if (isText) {
-      if (sbTC) sbTC.value = obj.fill || '#000000';
+      if (sbTC) sbTC.value = rgbToHex(obj.fill) || '#000000';
       if (sbFS) sbFS.value = obj.fontSize || 14;
+    }
+
+    // Cote : champ de saisie manuelle de la valeur
+    if (sbDG) sbDG.style.display = isDim ? 'inline-flex' : 'none';
+    if (isDim && sbDV) {
+      const calib = getPageCalibration();
+      sbDV.value = dimensionValueText(obj).replace(/\s*(m|cm|mm|pt)$/, '');
+      if (sbDU) sbDU.textContent = calib ? calib.unit : 'pt';
     }
   }
 
@@ -3571,45 +3669,148 @@ function initStyleBar() {
     }
   });
 
-  // Applique une propriété directement sur l'objet retenu (+ fallback getActiveObjects)
-  function applyProp(props) {
+  // Applique une propriété directement sur l'objet retenu (+ fallback getActiveObjects).
+  // `history = false` pendant un glissé de sélecteur de couleur : l'entrée
+  // d'annulation est posée une seule fois, sur `change`.
+  function applyProp(props, history = true) {
     const objs = fc.getActiveObjects().length ? fc.getActiveObjects()
                                               : (_lastObj ? [_lastObj] : []);
     if (!objs.length) return;
-    objs.forEach(o => { o.set(props); o.setCoords(); });
+    objs.forEach(o => applyStyleToObject(o, props));
     fc.requestRenderAll();
-    saveHistoryState();
+    if (history) saveHistoryState();
+  }
+  // Sélecteurs continus : aperçu sur `input`, historique sur `change`
+  function bindLive(el, toProps, after) {
+    if (!el) return;
+    el.addEventListener('input',  e => { applyProp(toProps(e.target.value), false); after?.(); });
+    el.addEventListener('change', e => { applyProp(toProps(e.target.value), true);  after?.(); });
   }
 
   // Actions — application directe, sans passer par le panneau latéral
-  if (sbSC) sbSC.addEventListener('input', e => {
-    App.toolProps.strokeColor = e.target.value;
-    applyProp({ stroke: e.target.value });
-  });
+  bindLive(sbSC, v => { App.toolProps.strokeColor = v; return { stroke: v }; });
   if (sbSW) sbSW.addEventListener('change', e => {
     const w = Math.max(0.1, parseFloat(e.target.value) || 1);
     App.toolProps.strokeWidth = w;
     applyProp({ strokeWidth: w });
   });
-  if (sbFC) sbFC.addEventListener('input', e => {
-    App.toolProps.fillColor = e.target.value;
-    applyProp({ fill: e.target.value });
-    sbFN?.classList.remove('active');
-  });
+  bindLive(sbFC, v => { App.toolProps.fillColor = v; return { fill: v }; },
+           () => sbFN?.classList.remove('active'));
   if (sbFN) sbFN.addEventListener('click', () => {
     App.toolProps.fillColor = 'transparent';
     applyProp({ fill: 'transparent' });
     sbFN.classList.add('active');
   });
-  if (sbTC) sbTC.addEventListener('input', e => {
-    App.toolProps.fontColor = e.target.value;
-    applyProp({ fill: e.target.value });
-  });
+  bindLive(sbTC, v => { App.toolProps.fontColor = v; return { fill: v }; });
   if (sbFS) sbFS.addEventListener('change', e => {
     const fs = Math.max(6, parseFloat(e.target.value) || 14);
     App.toolProps.fontSize = fs;
     applyProp({ fontSize: fs });
   });
+
+  // Cote : saisie manuelle de la valeur (Entrée ou perte de focus)
+  if (sbDV) {
+    const commit = () => {
+      const target = fc.getActiveObject() || _lastObj;
+      if (target?.data?.type !== 'dimension') return;
+      // Valeur inchangée → ne rien faire (évite une reconstruction au simple blur)
+      if (sbDV.value.trim() === dimensionValueText(target).replace(/\s*(m|cm|mm|pt)$/, '')) return;
+      const g = applyDimensionInput(target, sbDV.value);
+      if (g) { _lastObj = fc.getActiveObject(); showBar(_lastObj); }
+      else   { sbDV.select(); }
+    };
+    sbDV.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); commit(); sbDV.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); showBar(fc.getActiveObject() || _lastObj); sbDV.blur(); }
+    });
+    sbDV.addEventListener('change', commit);
+  }
+}
+
+// ============================================================
+// STYLE DES OBJETS COMPOSÉS
+// ------------------------------------------------------------
+// Un `fabric.Group` ne transmet ni `stroke`, ni `strokeWidth`, ni `fill`
+// à ses enfants : appliquer une couleur sur le groupe d'un symbole SVG,
+// d'une cote ou d'une bulle ne changeait rien à l'écran (v1.7.0). Ici on
+// descend dans les enfants selon le type d'objet.
+// ============================================================
+
+// Un fill blanc/transparent est le fond d'un symbole, pas un trait
+function isSymbolBackgroundFill(fill) {
+  if (!fill || fill === 'none' || fill === 'transparent') return true;
+  const hex = rgbToHex(fill);
+  return hex === '#ffffff' || String(fill).toLowerCase() === 'white';
+}
+
+// Style « effectif » d'un objet pour peupler les contrôles : pour un groupe
+// composé, celui du premier enfant tracé. `compound` signale un groupe dont le
+// remplissage ne doit pas être modifié globalement.
+function effectiveStyle(obj) {
+  const kind = obj?.data?.type;
+  const compound = obj?.type === 'group' && ['symbol', 'dimension', 'leader', 'count', 'stamp'].includes(kind);
+  if (!compound) return { stroke: obj.stroke, strokeWidth: obj.strokeWidth, fill: obj.fill, compound: false };
+  const kids = obj.getObjects ? obj.getObjects() : [];
+  const ref  = kids.find(k => k.stroke && k.stroke !== 'none' && k.type !== 'text' && k.type !== 'i-text' && k.type !== 'textbox')
+            || kids.find(k => k.stroke && k.stroke !== 'none')
+            || kids[0] || {};
+  return { stroke: ref.stroke, strokeWidth: ref.strokeWidth, fill: ref.fill, compound: true };
+}
+
+// Recolore les tracés d'un symbole (enfants d'un groupe SVG ou forme native)
+function recolorSymbolObjects(objects, color) {
+  objects.forEach(obj => {
+    if (obj.stroke && obj.stroke !== 'none' && obj.stroke !== '') obj.set('stroke', color);
+    if (!isSymbolBackgroundFill(obj.fill)) obj.set('fill', color);
+  });
+}
+
+// Applique un jeu de propriétés de style à un objet, en descendant dans les
+// enfants des groupes composés. Les sélections multiples sont dépliées.
+function applyStyleToObject(obj, props) {
+  if (!obj) return;
+  if (obj.type === 'activeSelection') { obj.getObjects().forEach(o => applyStyleToObject(o, props)); return; }
+
+  const kind = obj.data?.type;
+  const kids = obj.type === 'group' && obj.getObjects ? obj.getObjects() : null;
+
+  if (kids && kind === 'symbol') {
+    if ('stroke' in props)      recolorSymbolObjects(kids, props.stroke);
+    if ('strokeWidth' in props) kids.forEach(k => { if (k.stroke && k.stroke !== 'none') k.set('strokeWidth', props.strokeWidth); });
+    if ('opacity' in props)     obj.set('opacity', props.opacity);
+    // `fill` volontairement ignoré : il écraserait le fond blanc du symbole
+  } else if (kids && kind === 'dimension') {
+    kids.forEach(k => {
+      const isTxt = k.type === 'text' || k.type === 'i-text' || k.type === 'textbox';
+      if ('stroke' in props)          k.set(isTxt ? 'fill' : 'stroke', props.stroke);
+      if ('strokeWidth' in props && !isTxt) k.set('strokeWidth', props.strokeWidth);
+      if ('strokeDashArray' in props && !isTxt) k.set('strokeDashArray', props.strokeDashArray);
+      if ('fontSize' in props && isTxt) k.set('fontSize', props.fontSize);
+    });
+    if ('opacity' in props) obj.set('opacity', props.opacity);
+  } else if (kids && (kind === 'leader' || kind === 'count' || kind === 'stamp')) {
+    kids.forEach(k => {
+      const isTxt = k.type === 'text' || k.type === 'i-text' || k.type === 'textbox';
+      if ('stroke' in props) {
+        if (k.stroke && k.stroke !== 'none')   k.set('stroke', props.stroke);
+        if (k.type === 'triangle')             k.set('fill', props.stroke);   // pointe de flèche
+        if (isTxt && kind !== 'leader')        k.set('fill', props.stroke);   // numéro, tampon
+      }
+      if ('strokeWidth' in props && !isTxt && k.stroke && k.stroke !== 'none') k.set('strokeWidth', props.strokeWidth);
+      if ('fontSize' in props && isTxt) k.set('fontSize', props.fontSize);
+      if ('fill' in props && isTxt && kind === 'leader') k.set('fill', props.fill);   // couleur du texte de la bulle
+    });
+    if ('opacity' in props) obj.set('opacity', props.opacity);
+  } else if (kind === 'symbol') {
+    // Symbole natif (polygone, chemin, ellipse) : le fond blanc reste, le trait change
+    const { fill, ...rest } = props;
+    obj.set(rest);
+  } else {
+    obj.set(props);
+    if ('fill' in props) obj.set('perPixelTargetFind', isTransparentFill(props.fill));
+  }
+  if (kids) obj.set('dirty', true);
+  obj.setCoords();
 }
 
 // ============================================================
@@ -3690,7 +3891,11 @@ function initSidebar() {
   // Couleur des tracés des symboles
   document.getElementById('symbol-color').addEventListener('input', (e) => {
     App.symbolColor = e.target.value;
-    recolorSelectedSymbol(e.target.value);
+    recolorSelectedSymbol(e.target.value, false);   // aperçu en direct
+  });
+  document.getElementById('symbol-color').addEventListener('change', (e) => {
+    App.symbolColor = e.target.value;
+    recolorSelectedSymbol(e.target.value, true);    // une entrée d'historique au relâchement
   });
   document.getElementById('symbol-color-reset').addEventListener('click', () => {
     App.symbolColor = '#000000';
@@ -3738,11 +3943,7 @@ function applyToSelection(props, history = true) {
   const fc  = App.canvas;
   const sel = fc.getActiveObjects();
   if (!sel.length) return;
-  sel.forEach(obj => {
-    obj.set(props);
-    if ('fill' in props) obj.set('perPixelTargetFind', isTransparentFill(props.fill));
-    obj.setCoords();
-  });
+  sel.forEach(obj => applyStyleToObject(obj, props));
   fc.requestRenderAll();
   if (history) saveHistoryState();
 }
@@ -3775,6 +3976,28 @@ function initModals() {
     App._pendingCalibPixels = null;
     // Revenir à l'outil select
     setActiveTool('select');
+  });
+
+  // --- Modal saisie manuelle d'une cote ---
+  const dimModal = document.getElementById('modal-dim-value');
+  const dimInput = document.getElementById('dim-value-input');
+  const confirmDimValue = () => {
+    const group = App._pendingDimGroup;
+    if (!group) { closeModal(dimModal); return; }
+    if (applyDimensionInput(group, dimInput.value)) {
+      App._pendingDimGroup = null;
+      closeModal(dimModal);
+    } else {
+      dimInput.focus(); dimInput.select();
+    }
+  };
+  document.getElementById('dim-value-confirm').addEventListener('click', confirmDimValue);
+  document.getElementById('dim-value-cancel').addEventListener('click', () => {
+    App._pendingDimGroup = null;
+    closeModal(dimModal);
+  });
+  dimInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmDimValue(); }
   });
 
   // --- Modal calibration par échelle ---
@@ -4286,9 +4509,19 @@ function hideIndicator(id) {
 }
 
 // Convertit rgb(r,g,b) en #rrggbb pour les color inputs
+// Normalise une couleur CSS en « #rrggbb » (seule forme acceptée par
+// <input type=color>). Retourne null si la couleur n'est pas convertible
+// (dégradé, motif, nom inconnu) : l'appelant choisit alors sa valeur par défaut.
+const NAMED_COLORS = { black: '#000000', white: '#ffffff', red: '#ff0000', green: '#008000',
+                       blue: '#0000ff', yellow: '#ffff00', gray: '#808080', grey: '#808080' };
 function rgbToHex(color) {
-  if (!color || color.startsWith('#')) return color;
-  const m = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-  if (!m) return color;
-  return '#' + [m[1], m[2], m[3]].map(x => parseInt(x).toString(16).padStart(2, '0')).join('');
+  if (!color || typeof color !== 'string') return null;
+  const c = color.trim().toLowerCase();
+  if (NAMED_COLORS[c]) return NAMED_COLORS[c];
+  if (/^#[0-9a-f]{6}$/.test(c)) return c;
+  if (/^#[0-9a-f]{8}$/.test(c)) return c.slice(0, 7);
+  if (/^#[0-9a-f]{3,4}$/.test(c)) return '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
+  const m = c.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return null;
+  return '#' + [m[1], m[2], m[3]].map(x => parseInt(x, 10).toString(16).padStart(2, '0')).join('');
 }

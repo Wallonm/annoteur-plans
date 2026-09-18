@@ -79,6 +79,6 @@ test('surface d\u2019une pièce réelle : cohérence bout en bout', () => {
     { x: 4 * ppu, y: 5 * ppu },
     { x: 0,       y: 5 * ppu },
   ];
-  assert.equal(G.formatArea(G.polygonArea(piece), calib), '20.00 m²');
-  assert.equal(G.formatDimension(G.pathLength(piece, true), calib), '18.00 m');
+  assert.equal(G.formatArea(G.polygonArea(piece), calib), '20,00 m²');
+  assert.equal(G.formatDimension(G.pathLength(piece, true), calib), '18,00 m');
 });

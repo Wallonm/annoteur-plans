@@ -89,13 +89,13 @@ test('formatDimension : points bruts si non calibré, unité réelle sinon', () 
   assert.equal(G.formatDimension(123.4, null), '123 pt');
   // À 1:100, 283.46 pt = 10 m
   const calib = { pointsPerUnit: G.scaleToPointsPerUnit(100, 'm'), unit: 'm' };
-  assert.equal(G.formatDimension(G.scaleToPointsPerUnit(100, 'm') * 10, calib), '10.00 m');
+  assert.equal(G.formatDimension(G.scaleToPointsPerUnit(100, 'm') * 10, calib), '10,00 m');
 });
 
 test('formatArea : surface au carré de l’unité', () => {
   const ppu = G.scaleToPointsPerUnit(100, 'm');
   // Une pièce de 4 m × 5 m = 20 m²
-  assert.equal(G.formatArea((4 * ppu) * (5 * ppu), { pointsPerUnit: ppu, unit: 'm' }), '20.00 m²');
+  assert.equal(G.formatArea((4 * ppu) * (5 * ppu), { pointsPerUnit: ppu, unit: 'm' }), '20,00 m²');
 });
 
 test('polygonArea : lacet, indépendant du sens de parcours', () => {
@@ -146,4 +146,53 @@ test('nearestPoint : respecte la tolérance', () => {
   assert.deepEqual(G.nearestPoint({x:3,y:4}, cands, 8), {x:0,y:0});
   assert.equal(G.nearestPoint({x:3,y:4}, cands, 2), null);
   assert.equal(G.nearestPoint({x:0,y:0}, [], 10), null);
+});
+
+test('formatDimension : format français (virgule, espace fine insécable de milliers)', () => {
+  const calib = { pointsPerUnit: G.scaleToPointsPerUnit(100, 'mm'), unit: 'mm' };
+  // 1 500 mm à 1:100 → séparateur de milliers U+202F
+  assert.equal(G.formatDimension(calib.pointsPerUnit * 1500, calib), '1\u202f500,00 mm');
+  // Bascule cm → m au-delà de 999 cm
+  const cm = { pointsPerUnit: G.scaleToPointsPerUnit(100, 'cm'), unit: 'cm' };
+  assert.equal(G.formatDimension(cm.pointsPerUnit * 1250, cm), '12,50 m');
+});
+
+test('resizeDimension : p1 fixe, direction conservée, écartement conservé', () => {
+  const p1 = { x: 10, y: 10 }, p2 = { x: 40, y: 50 };   // longueur 50, direction (0.6, 0.8)
+  const off = { x: 25 - 8 * 0.8, y: 30 + 8 * 0.6 };      // milieu + 8 sur la normale (-0.8, 0.6)
+  const r = G.resizeDimension(p1, p2, off, 100);
+  assert.deepEqual(r.p1, p1);
+  close(r.p2.x, 70); close(r.p2.y, 90);
+  // Nouveau milieu (40, 50), écartement 8 le long de (-0.8, 0.6)
+  close(r.offsetPt.x, 40 - 6.4); close(r.offsetPt.y, 50 + 4.8);
+  // L'écartement signé est identique avant et après
+  const before = G.computeDimGeometry(p1, p2, off).offset;
+  const after  = G.computeDimGeometry(r.p1, r.p2, r.offsetPt).offset;
+  close(before, after);
+  close(after, 8);
+});
+
+test('resizeDimension : cote horizontale réduite, offset négatif', () => {
+  const r = G.resizeDimension({ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 100, y: -20 }, 50);
+  close(r.p2.x, 50); close(r.p2.y, 0);
+  close(r.offsetPt.x, 25); close(r.offsetPt.y, -20);
+  assert.throws(() => G.resizeDimension({ x: 0, y: 0 }, { x: 0, y: 0 }, null, 10), /nulle/);
+  assert.throws(() => G.resizeDimension({ x: 0, y: 0 }, { x: 1, y: 0 }, null, 0), /invalide/);
+});
+
+test('parseLengthInput : virgule ou point, unité implicite ou explicite', () => {
+  const ppu   = G.scaleToPointsPerUnit(100, 'cm');
+  const calib = { pointsPerUnit: ppu, unit: 'cm' };
+  close(G.parseLengthInput('350', calib),       350 * ppu);
+  close(G.parseLengthInput('3,5 m', calib),     350 * ppu);
+  close(G.parseLengthInput('3.5m', calib),      350 * ppu);
+  close(G.parseLengthInput(' 3500 mm ', calib), 350 * ppu);
+  close(G.parseLengthInput('120 pt', calib),    120);
+  assert.equal(G.parseLengthInput('abc', calib), null);
+  assert.equal(G.parseLengthInput('0', calib), null);
+  assert.equal(G.parseLengthInput('-4', calib), null);
+  assert.equal(G.parseLengthInput('4 km', calib), null);
+  // Non calibré : points bruts, une unité réelle est refusée
+  close(G.parseLengthInput('42,5', null), 42.5);
+  assert.equal(G.parseLengthInput('4 m', null), null);
 });

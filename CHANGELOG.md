@@ -1,5 +1,67 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.8.0 — Saisie manuelle des cotes, style des objets composés
+
+### Ajouté
+
+- **Saisie manuelle sur une cote existante.** Double-clic sur une cote (ou sur
+  l'une de ses poignées), ou champ « Valeur » de la barre de style quand une
+  cote est sélectionnée. La valeur saisie redimensionne la cote selon la
+  calibration de la page : le point de départ et l'alignement sont conservés,
+  le second point glisse le long de l'axe, la ligne de cote garde son
+  écartement. Saisie tolérante : « 4,20 », « 4.2 m », « 350 cm », « 120 pt » ;
+  sans unité, celle de la page. Une seule entrée d'annulation par saisie.
+  Page non calibrée : la valeur est prise en points, et la fenêtre le dit.
+- `resizeDimension` et `parseLengthInput` dans `geometry.js`, testés (47 tests).
+
+### Corrigé
+
+- **La couleur de trait ne s'appliquait pas aux symboles déjà posés** depuis la
+  barre de style ni depuis le panneau Style : un `fabric.Group` ne transmet ni
+  `stroke`, ni `strokeWidth`, ni `fill` à ses enfants. Le contour, l'épaisseur
+  et l'opacité descendent maintenant dans les tracés du symbole (fond blanc
+  préservé, contrôle de fond désactivé pour les objets composés). Même
+  traitement pour les cotes (lignes + texte), bulles de renvoi, repères de
+  comptage et tampons.
+- Le sélecteur « Couleur des symboles » ne recolorait que le premier symbole
+  d'une sélection multiple, et posait une entrée d'annulation à chaque
+  mouvement du sélecteur (la pile de 50 pouvait être vidée par un seul glissé).
+  Idem pour la couleur de contour de la barre de style. Aperçu sur `input`,
+  historique sur `change`, comme pour l'opacité.
+- Les contrôles de couleur affichaient noir pour un symbole (`stroke` du groupe
+  vide) : ils lisent le style effectif du premier enfant tracé. `rgbToHex`
+  accepte `black`, `white`, `#000`, `rgba(...)`.
+- Un glissé de poignée conservait la couleur de l'outil courant au lieu de
+  celle de la cote éditée, et renvoyait la cote en haut de la pile.
+- Le bandeau de la bulle de renvoi restait affiché après Échap.
+- L'aide des raccourcis affichait « A : areapoly ».
+- Infobulles ⬆/⬇ : Ctrl+] avance d'un rang, Ctrl+Maj+] met au premier plan.
+- Tests : les trois attentes en format anglais (`10.00 m`) contredisaient le
+  format français posé au lot 6 (`10,00 m`). 40/43 verts depuis v1.7.0.
+
+### Non traité (voir AUDIT-2026-09-18.md)
+
+Pointe de flèche des bulles absente de l'export vectoriel, séparateur de
+milliers U+202F rendu « ? » dans le PDF, calibration « toutes les pages » sans
+rafraîchissement des étiquettes des autres pages.
+
+
+## v1.7.0 — Lot 6 : Outils de mesure et barre de style contextuelle
+
+Version livrée sans entrée de journal ni étiquette git (le numéro affiché
+dans l'application restait 1.6.1). Contenu, d'après le commit 384e9ba :
+
+- Séparateurs de milliers et conversion automatique cm→m, cm²→m² dans
+  `formatDimension` / `formatArea`.
+- Outil mesure libre (⬟, touche A) : polygone temporaire, surface et
+  périmètre affichés au double-clic.
+- Gel des annotations existantes pendant les outils mesure et mesure libre.
+- Épaisseur des lignes de cote fixée à 1 pt.
+- Barre de style contextuelle au-dessus du canvas : contour, épaisseur, fond,
+  texte.
+- Barre gauche allégée (polyligne, polygone, dessin libre retirés).
+- Correctifs : clic hors d'une textbox, rechargement de la page 1 d'un projet.
+
 ## v1.6.1 — Calques : repère de page et couleur
 
 Depuis le lot 3 les calques sont globaux au document. Bonne chose pour la

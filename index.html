@@ -522,8 +522,8 @@
     <button class="tool-btn" id="btn-area" title="Surface et périmètre de la sélection (S)">▦</button>
     <button class="tool-btn" data-tool="calibrate" title="Calibrer la page (K)">🎯</button>
     <div class="tool-sep"></div>
-    <button class="tool-btn" id="btn-front" title="Premier plan (Ctrl+])">⬆</button>
-    <button class="tool-btn" id="btn-back" title="Arrière-plan (Ctrl+[)">⬇</button>
+    <button class="tool-btn" id="btn-front" title="Avancer d'un rang (Ctrl+]) — Premier plan (Ctrl+Maj+])">⬆</button>
+    <button class="tool-btn" id="btn-back" title="Reculer d'un rang (Ctrl+[) — Arrière-plan (Ctrl+Maj+[)">⬇</button>
     <div class="tool-sep"></div>
     <button class="tool-btn" id="btn-undo" title="Annuler (Ctrl+Z)">↩</button>
     <button class="tool-btn" id="btn-redo" title="Rétablir (Ctrl+Maj+Z)">↪</button>
@@ -549,6 +549,12 @@
         <label>Texte</label>
         <input type="color" id="sb-text-color" title="Couleur du texte">
         <input type="number" id="sb-font-size" min="6" max="120" title="Corps (pt)" style="width:44px">
+        <span id="sb-dim-group" style="display:none;align-items:center;gap:6px">
+          <div class="sb-sep"></div>
+          <label for="sb-dim-value">Valeur</label>
+          <input type="text" id="sb-dim-value" inputmode="decimal" title="Longueur de la cote — Entrée pour appliquer" style="width:64px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:12px;text-align:center" autocomplete="off">
+          <span id="sb-dim-unit" style="font-size:11px;color:var(--text-dim)">cm</span>
+        </span>
       </div>
       <div id="canvas-container">
         <canvas id="main-canvas"></canvas>
@@ -713,6 +719,28 @@
     <div class="modal-footer">
       <button class="modal-btn" id="calib-cancel">Annuler</button>
       <button class="modal-btn confirm" id="calib-confirm">Calibrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal saisie manuelle d'une cote existante -->
+<div class="modal-backdrop" id="modal-dim-value" role="dialog" aria-modal="true" aria-labelledby="modal-dim-value-title">
+  <div class="modal">
+    <h2 id="modal-dim-value-title">📏 Valeur de la cote</h2>
+    <div class="modal-body">
+      <label for="dim-value-input">Nouvelle longueur
+        <div style="display:flex;gap:8px;align-items:center;margin-top:3px">
+          <input type="text" id="dim-value-input" inputmode="decimal" placeholder="ex: 4,20 ou 350 cm" style="flex:1" autocomplete="off">
+          <span id="dim-value-unit" style="min-width:28px;color:var(--text-dim)">cm</span>
+        </div>
+      </label>
+      <div style="font-size:11px;color:var(--text-dim)">Valeur mesurée : <strong id="dim-value-measured">—</strong>.
+        Le point de départ et l'alignement sont conservés, le second point est déplacé.</div>
+      <div id="dim-value-hint" style="font-size:11px;color:var(--warn,#f0a030);display:none">Page non calibrée : la valeur est prise en points PDF.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="dim-value-cancel">Annuler</button>
+      <button class="modal-btn confirm" id="dim-value-confirm">Appliquer</button>
     </div>
   </div>
 </div>
