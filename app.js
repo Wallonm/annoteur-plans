@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.8.1';   // Correctifs de l'audit du 18/09 (export vectoriel, calibration, bulles)
+const APP_VERSION  = '1.8.2';   // Hors ligne (service worker), CI, fixture synthétique
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===

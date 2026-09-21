@@ -1,5 +1,18 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.8.2 — Hors ligne, intégration continue, fixture synthétique
+
+- **Service worker** (`sw.js`) et manifeste : hébergée, l'app se met en cache à
+  la première visite et démarre ensuite sans réseau. Installable comme
+  application depuis le navigateur.
+- **GitHub Actions** : tests unitaires et bout en bout à chaque push
+  (`.github/workflows/tests.yml`), publication sur GitHub Pages à chaque push
+  sur master (`pages.yml`).
+- **Fixture de migration synthétique** : `projet-v1.1-synthetique.json`
+  remplace le projet réel (textes remplacés, positions légèrement décalées,
+  même structure et mêmes cas de migration). Le projet réel et l'ancienne
+  fixture sont retirés de l'historique git.
+
 ## v1.8.1 — Correctifs de l'audit du 18/09/2026
 
 Tout ce qui est listé en P1 et P2 dans `AUDIT-2026-09-18.md`, sauf la

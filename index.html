@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Annoteur Plans PDF</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#7c6ff7">
   <style>
     /* ===== RESET & BASE ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -905,5 +907,12 @@
 <script src="tools-metier.js"></script>
 <script src="symbols.js"></script>
 <script src="app.js"></script>
+<script>
+  // Hors ligne : le service worker met l'app en cache dès la première visite.
+  // Ignoré en file:// et sur les navigateurs sans support.
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker non installé :', err));
+  }
+</script>
 </body>
 </html>

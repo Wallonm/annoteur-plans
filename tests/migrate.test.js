@@ -99,7 +99,7 @@ test('migrateProject : format inconnu rejeté explicitement', () => {
 // ------------------------------------------------------------
 // Projet réel : plan_redresse_v4, 7 pages, DEUX repères distincts
 // ------------------------------------------------------------
-const fixture = path.join(__dirname, 'fixtures', 'projet-v1.1.json');
+const fixture = path.join(__dirname, 'fixtures', 'projet-v1.1-synthetique.json');
 
 test('projet réel : conversion complète et cohérente', { skip: !fs.existsSync(fixture) }, () => {
   const src = JSON.parse(fs.readFileSync(fixture, 'utf8'));

@@ -1,0 +1,13 @@
+{
+  "name": "Annoteur Plans PDF",
+  "short_name": "Annoteur",
+  "description": "Annotation et relevé sur plans PDF, 100 % navigateur, hors ligne.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1e1e2e",
+  "theme_color": "#7c6ff7",
+  "lang": "fr",
+  "icons": [
+    { "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231e1e2e'/%3E%3Cpath d='M12 48 L52 8 M12 48 L20 48 M12 48 L12 40 M52 8 L44 8 M52 8 L52 16' stroke='%237c6ff7' stroke-width='5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

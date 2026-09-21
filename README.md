@@ -18,6 +18,11 @@ npx serve -p 3335 .
 Les bibliothèques sont servies depuis `vendor/` : **l'application fonctionne
 hors ligne**, y compris sur chantier sans réseau.
 
+Hébergée (GitHub Pages ou tout serveur statique), elle s'installe comme une
+application : un service worker met tous les fichiers en cache à la première
+visite, et l'app s'ouvre ensuite sans connexion. Les mises à jour sont prises
+au rechargement suivant, quand le réseau est revenu.
+
 ## Organisation
 
 | Fichier | Rôle |
