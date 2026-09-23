@@ -441,6 +441,45 @@ const SYMBOL_CATEGORIES = [
   <path d="M3,3 L157,3 L157,80 L80,80 L80,157 L3,157 Z" fill="white" stroke="black" stroke-width="2"/>
   <path d="M3,67 L67,67 L67,157" fill="none" stroke="black" stroke-width="1.5"/>
 </svg>`
+      },
+      {
+        id: 'biblio-60',
+        label: 'Bibliothèque 60',
+        defaultW: 60, defaultH: 25,
+        realW_cm: 60, realH_cm: 25,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 25">
+  <rect x="2" y="2" width="56" height="21" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="21" y1="2" x2="21" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="40" y1="2" x2="40" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="2"  y1="8" x2="58" y2="8"  stroke="black" stroke-width="0.5" stroke-dasharray="3,2"/>
+</svg>`
+      },
+      {
+        id: 'biblio-80',
+        label: 'Bibliothèque 80',
+        defaultW: 80, defaultH: 25,
+        realW_cm: 80, realH_cm: 25,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 25">
+  <rect x="2" y="2" width="76" height="21" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="22" y1="2" x2="22" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="42" y1="2" x2="42" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="62" y1="2" x2="62" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="2"  y1="8" x2="78" y2="8"  stroke="black" stroke-width="0.5" stroke-dasharray="3,2"/>
+</svg>`
+      },
+      {
+        id: 'biblio-100',
+        label: 'Bibliothèque 100',
+        defaultW: 100, defaultH: 25,
+        realW_cm: 100, realH_cm: 25,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 25">
+  <rect x="2" y="2" width="96" height="21" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="22" y1="2" x2="22" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="42" y1="2" x2="42" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="62" y1="2" x2="62" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="82" y1="2" x2="82" y2="23" stroke="black" stroke-width="1"/>
+  <line x1="2"  y1="8" x2="98" y2="8"  stroke="black" stroke-width="0.5" stroke-dasharray="3,2"/>
+</svg>`
       }
     ]
   },
@@ -680,6 +719,18 @@ const SYMBOL_CATEGORIES = [
   <line x1="50" y1="2" x2="50" y2="10" stroke="black" stroke-width="1"/>
   <line x1="80" y1="2" x2="80" y2="10" stroke="black" stroke-width="1"/>
   </g>
+</svg>`
+      },
+      {
+        id: 'lave-mains',
+        label: 'Lave-mains',
+        defaultW: 45, defaultH: 35,
+        realW_cm: 45, realH_cm: 35,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 35">
+  <rect x="3" y="3" width="39" height="29" rx="8" fill="white" stroke="black" stroke-width="2"/>
+  <ellipse cx="22" cy="20" rx="12" ry="8" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="22" cy="8" r="2.5" fill="black"/>
+  <line x1="16" y1="8" x2="28" y2="8" stroke="black" stroke-width="1.5"/>
 </svg>`
       },
       {
