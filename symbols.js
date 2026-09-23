@@ -4,329 +4,8 @@
 // ============================================================
 
 const SYMBOL_CATEGORIES = [
-  {
-    id: 'sanitaires',
-    label: '🚿 Sanitaires',
-    symbols: [
-      {
-        id: 'wc',
-        label: 'WC',
-        defaultW: 37, defaultH: 65,
-        realW_cm: 37, realH_cm: 65,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 37 65">
-  <g transform="scale(0.617,0.8125)">
-  <rect x="4" y="4" width="52" height="18" rx="3" fill="white" stroke="black" stroke-width="2"/>
-  <path d="M8,22 L52,22 Q56,22 56,50 Q56,76 30,76 Q4,76 4,50 Q4,22 8,22 Z" fill="white" stroke="black" stroke-width="2"/>
-  <ellipse cx="30" cy="50" rx="16" ry="20" fill="none" stroke="black" stroke-width="1.5"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'lavabo',
-        label: 'Lavabo',
-        defaultW: 65, defaultH: 50,
-        realW_cm: 60, realH_cm: 45,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 65 50">
-  <rect x="4" y="4" width="57" height="42" rx="10" fill="white" stroke="black" stroke-width="2"/>
-  <ellipse cx="32" cy="28" rx="19" ry="13" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="32" cy="11" r="3" fill="black"/>
-  <line x1="24" y1="11" x2="40" y2="11" stroke="black" stroke-width="2"/>
-</svg>`
-      },
-      {
-        id: 'baignoire',
-        label: 'Baignoire',
-        defaultW: 70, defaultH: 160,
-        realW_cm: 70, realH_cm: 160,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 160">
-  <rect x="4" y="4" width="62" height="152" rx="10" fill="white" stroke="black" stroke-width="2"/>
-  <ellipse cx="35" cy="88" rx="25" ry="58" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="35" cy="18" r="5" fill="black"/>
-  <circle cx="22" cy="18" r="3" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="48" cy="18" r="3" fill="none" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'douche',
-        label: 'Douche',
-        defaultW: 90, defaultH: 90,
-        realW_cm: 90, realH_cm: 90,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90">
-  <rect x="4" y="4" width="82" height="82" fill="white" stroke="black" stroke-width="2"/>
-  <path d="M4,4 Q4,20 20,20 L4,20 Z" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="12" cy="12" r="5" fill="none" stroke="black" stroke-width="1.5"/>
-  <line x1="12" y1="7" x2="12" y2="4" stroke="black" stroke-width="1"/>
-  <line x1="17" y1="12" x2="20" y2="12" stroke="black" stroke-width="1"/>
-  <line x1="15.5" y1="8.5" x2="17.5" y2="6.5" stroke="black" stroke-width="1"/>
-  <!-- Receveur incliné -->
-  <line x1="4" y1="86" x2="86" y2="86" stroke="black" stroke-width="1"/>
-  <line x1="4" y1="86" x2="4" y2="4" stroke="black" stroke-width="1"/>
-</svg>`
-      },
-      {
-        id: 'bidet',
-        label: 'Bidet',
-        defaultW: 45, defaultH: 70,
-        realW_cm: 37, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 70">
-  <path d="M6,4 L39,4 Q41,4 41,20 Q41,66 22.5,66 Q4,66 4,20 Q4,4 6,4 Z" fill="white" stroke="black" stroke-width="2"/>
-  <ellipse cx="22.5" cy="38" rx="13" ry="22" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="22.5" cy="10" r="3" fill="black"/>
-  <line x1="16" y1="10" x2="29" y2="10" stroke="black" stroke-width="2"/>
-</svg>`
-      }
-    ]
-  },
-  {
-    id: 'mobilier',
-    label: '🛋️ Mobilier',
-    symbols: [
-      {
-        id: 'lit-simple',
-        label: 'Lit simple',
-        defaultW: 90, defaultH: 190,
-        realW_cm: 90, realH_cm: 200,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 190">
-  <rect x="4" y="4" width="82" height="182" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Tête de lit -->
-  <rect x="4" y="4" width="82" height="28" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
-  <!-- Oreiller -->
-  <rect x="15" y="38" width="60" height="38" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'lit-double',
-        label: 'Lit double',
-        defaultW: 140, defaultH: 200,
-        realW_cm: 140, realH_cm: 200,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 200">
-  <g transform="scale(0.875,1.053)">
-  <rect x="4" y="4" width="152" height="182" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="4" y="4" width="152" height="28" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
-  <line x1="80" y1="32" x2="80" y2="186" stroke="black" stroke-width="1" stroke-dasharray="4,4"/>
-  <rect x="14" y="38" width="55" height="35" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
-  <rect x="91" y="38" width="55" height="35" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'canape',
-        label: 'Canapé 3 places',
-        defaultW: 210, defaultH: 90,
-        realW_cm: 220, realH_cm: 90,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 90">
-  <!-- Dossier -->
-  <rect x="4" y="4" width="202" height="30" rx="6" fill="#ddd" stroke="black" stroke-width="2"/>
-  <!-- Assise -->
-  <rect x="4" y="34" width="202" height="42" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Accoudoirs -->
-  <rect x="4" y="34" width="18" height="42" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
-  <rect x="188" y="34" width="18" height="42" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
-  <!-- Séparations places -->
-  <line x1="74" y1="34" x2="74" y2="76" stroke="black" stroke-width="1"/>
-  <line x1="136" y1="34" x2="136" y2="76" stroke="black" stroke-width="1"/>
-</svg>`
-      },
-      {
-        id: 'table-ronde',
-        label: 'Table ronde',
-        defaultW: 110, defaultH: 110,
-        realW_cm: 110, realH_cm: 110,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 110">
-  <circle cx="55" cy="55" r="48" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Chaises -->
-  <rect x="40" y="2" width="30" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="40" y="94" width="30" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="2" y="40" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="94" y="40" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'table-rect',
-        label: 'Table rectangulaire',
-        defaultW: 160, defaultH: 80,
-        realW_cm: 160, realH_cm: 80,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80">
-  <g transform="scale(1,0.889)">
-  <rect x="22" y="22" width="116" height="46" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="36" y="5" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="100" y="5" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="36" y="71" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="100" y="71" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="5" y="30" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="141" y="30" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'armoire',
-        label: 'Armoire',
-        defaultW: 200, defaultH: 60,
-        realW_cm: 200, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
-  <rect x="4" y="4" width="192" height="52" fill="white" stroke="black" stroke-width="2"/>
-  <line x1="100" y1="4" x2="100" y2="56" stroke="black" stroke-width="1.5"/>
-  <!-- Poignées -->
-  <circle cx="88" cy="30" r="4" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="112" cy="30" r="4" fill="none" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'bureau',
-        label: 'Bureau',
-        defaultW: 140, defaultH: 70,
-        realW_cm: 140, realH_cm: 70,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 70">
-  <rect x="4" y="4" width="132" height="62" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Tiroirs -->
-  <rect x="100" y="10" width="30" height="20" rx="2" fill="none" stroke="black" stroke-width="1.5"/>
-  <rect x="100" y="34" width="30" height="24" rx="2" fill="none" stroke="black" stroke-width="1.5"/>
-  <!-- Poignées tiroirs -->
-  <line x1="112" y1="20" x2="120" y2="20" stroke="black" stroke-width="1.5"/>
-  <line x1="112" y1="46" x2="120" y2="46" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'chaise',
-        label: 'Chaise',
-        defaultW: 45, defaultH: 45,
-        realW_cm: 45, realH_cm: 45,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
-  <g transform="scale(1,0.9)">
-  <rect x="5" y="4" width="35" height="14" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
-  <rect x="5" y="18" width="35" height="28" rx="4" fill="white" stroke="black" stroke-width="1.5"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'fauteuil',
-        label: 'Fauteuil',
-        defaultW: 80, defaultH: 80,
-        realW_cm: 80, realH_cm: 80,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
-  <!-- Dossier -->
-  <rect x="8" y="4" width="64" height="18" rx="6" fill="#ddd" stroke="black" stroke-width="2"/>
-  <!-- Assise -->
-  <rect x="8" y="22" width="64" height="44" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Accoudoir gauche -->
-  <rect x="4" y="22" width="12" height="44" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
-  <!-- Accoudoir droit -->
-  <rect x="64" y="22" width="12" height="44" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'table-a-manger',
-        label: 'Table à manger',
-        defaultW: 200, defaultH: 90,
-        realW_cm: 200, realH_cm: 90,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 90">
-  <g transform="scale(1,0.818)">
-  <rect x="24" y="22" width="152" height="66" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="30" y="5"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="86" y="5"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="142" y="5" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="30" y="91"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="86" y="91"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="142" y="91" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="5"   y="38" width="14" height="34" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <rect x="181" y="38" width="14" height="34" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  </g>
-</svg>`
-      }
-    ]
-  },
-  {
-    id: 'equipements',
-    label: '🔧 Équipements',
-    symbols: [
-      {
-        id: 'radiateur',
-        label: 'Radiateur',
-        defaultW: 140, defaultH: 18,
-        realW_cm: 140, realH_cm: 18,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 18">
-  <rect x="2" y="2" width="136" height="14" fill="white" stroke="black" stroke-width="1.5"/>
-  <line x1="22" y1="2" x2="22" y2="16" stroke="black" stroke-width="1"/>
-  <line x1="42" y1="2" x2="42" y2="16" stroke="black" stroke-width="1"/>
-  <line x1="62" y1="2" x2="62" y2="16" stroke="black" stroke-width="1"/>
-  <line x1="82" y1="2" x2="82" y2="16" stroke="black" stroke-width="1"/>
-  <line x1="102" y1="2" x2="102" y2="16" stroke="black" stroke-width="1"/>
-  <line x1="118" y1="2" x2="118" y2="16" stroke="black" stroke-width="1"/>
-</svg>`
-      },
-      {
-        id: 'evier',
-        label: 'Évier simple',
-        defaultW: 70, defaultH: 55,
-        realW_cm: 60, realH_cm: 50,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 55">
-  <rect x="4" y="4" width="62" height="47" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="10" y="10" width="50" height="35" rx="4" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="35" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="35" cy="8" r="3" fill="black"/>
-  <line x1="28" y1="8" x2="42" y2="8" stroke="black" stroke-width="2"/>
-</svg>`
-      },
-      {
-        id: 'evier-double',
-        label: 'Évier double',
-        defaultW: 120, defaultH: 50,
-        realW_cm: 120, realH_cm: 50,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 50">
-  <g transform="scale(1,0.909)">
-  <rect x="4" y="4" width="112" height="47" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="10" y="10" width="46" height="35" rx="3" fill="none" stroke="black" stroke-width="1.5"/>
-  <rect x="64" y="10" width="46" height="35" rx="3" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="33" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="87" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="60" cy="8" r="3" fill="black"/>
-  <line x1="52" y1="8" x2="68" y2="8" stroke="black" stroke-width="2"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'plaque',
-        label: 'Plaque cuisson',
-        defaultW: 80, defaultH: 80,
-        realW_cm: 60, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
-  <rect x="4" y="4" width="72" height="72" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <circle cx="22" cy="22" r="12" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="22" cy="22" r="5" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="58" cy="22" r="12" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="58" cy="22" r="5" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="22" cy="58" r="12" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="22" cy="58" r="5" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="58" cy="58" r="12" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="58" cy="58" r="5" fill="none" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'frigo',
-        label: 'Réfrigérateur',
-        defaultW: 70, defaultH: 80,
-        realW_cm: 60, realH_cm: 65,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 80">
-  <rect x="4" y="4" width="62" height="72" rx="4" fill="white" stroke="black" stroke-width="2"/>
-  <line x1="4" y1="32" x2="66" y2="32" stroke="black" stroke-width="1.5"/>
-  <!-- Poignées -->
-  <line x1="52" y1="12" x2="52" y2="28" stroke="black" stroke-width="2.5"/>
-  <line x1="52" y1="40" x2="52" y2="70" stroke="black" stroke-width="2.5"/>
-</svg>`
-      },
-      {
-        id: 'chauffe-eau',
-        label: 'Chauffe-eau',
-        defaultW: 60, defaultH: 60,
-        realW_cm: 45, realH_cm: 45,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60">
-  <circle cx="30" cy="30" r="26" fill="white" stroke="black" stroke-width="2"/>
-  <circle cx="30" cy="30" r="18" fill="none" stroke="black" stroke-width="1.5"/>
-  <text x="30" y="35" text-anchor="middle" font-size="10" font-family="sans-serif" fill="black">CE</text>
-</svg>`
-      }
-    ]
-  },
+
+  // ── Architecture ─────────────────────────────────────────────
   {
     id: 'architecture',
     label: '🏗️ Architecture',
@@ -337,11 +16,8 @@ const SYMBOL_CATEGORIES = [
         defaultW: 90, defaultH: 90,
         realW_cm: 83, realH_cm: 83,
         svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90">
-  <!-- Mur -->
   <line x1="4" y1="4" x2="4" y2="86" stroke="black" stroke-width="8"/>
-  <!-- Vantail : charnière en (4,4), extrémité en (86,4) -->
   <line x1="4" y1="4" x2="86" y2="4" stroke="black" stroke-width="3"/>
-  <!-- Arc de battement : de l'extrémité du vantail (86,4) jusqu'à (4,86), r=82, sens horaire -->
   <path d="M 86 4 A 82 82 0 0 1 4 86" fill="none" stroke="black" stroke-width="1.5" stroke-dasharray="4,3"/>
 </svg>`
       },
@@ -367,9 +43,7 @@ const SYMBOL_CATEGORIES = [
         defaultW: 120, defaultH: 20,
         realW_cm: 120, realH_cm: 20,
         svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 20">
-  <!-- Épaisseur de mur -->
   <rect x="0" y="0" width="120" height="20" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Vitrage (3 lignes) -->
   <line x1="0" y1="6" x2="120" y2="6" stroke="black" stroke-width="1"/>
   <line x1="0" y1="14" x2="120" y2="14" stroke="black" stroke-width="1"/>
 </svg>`
@@ -425,7 +99,296 @@ const SYMBOL_CATEGORIES = [
     ]
   },
 
-  // ── Cuisine ──────────────────────────────────────────────────
+  // ── Chambre & rangement ───────────────────────────────────────
+  {
+    id: 'chambre',
+    label: '🛏️ Chambre & rangement',
+    symbols: [
+      {
+        id: 'lit-simple',
+        label: 'Lit simple',
+        defaultW: 90, defaultH: 190,
+        realW_cm: 90, realH_cm: 200,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 190">
+  <rect x="4" y="4" width="82" height="182" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="4" y="4" width="82" height="28" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
+  <rect x="15" y="38" width="60" height="38" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'lit-double',
+        label: 'Lit double',
+        defaultW: 140, defaultH: 200,
+        realW_cm: 140, realH_cm: 200,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 200">
+  <g transform="scale(0.875,1.053)">
+  <rect x="4" y="4" width="152" height="182" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="4" y="4" width="152" height="28" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
+  <line x1="80" y1="32" x2="80" y2="186" stroke="black" stroke-width="1" stroke-dasharray="4,4"/>
+  <rect x="14" y="38" width="55" height="35" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
+  <rect x="91" y="38" width="55" height="35" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'lit-enfant',
+        label: 'Lit enfant',
+        defaultW: 80, defaultH: 160,
+        realW_cm: 70, realH_cm: 140,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 160">
+  <rect x="3" y="3" width="74" height="154" rx="5" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="3" y="3" width="74" height="20" rx="5" fill="none" stroke="black" stroke-width="2"/>
+  <line x1="3" y1="143" x2="77" y2="143" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'armoire',
+        label: 'Armoire',
+        defaultW: 200, defaultH: 60,
+        realW_cm: 200, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
+  <rect x="4" y="4" width="192" height="52" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="100" y1="4" x2="100" y2="56" stroke="black" stroke-width="1.5"/>
+  <circle cx="88" cy="30" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="112" cy="30" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'dressing',
+        label: 'Dressing',
+        defaultW: 200, defaultH: 60,
+        realW_cm: 200, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
+  <g transform="scale(1.25,1)">
+  <rect x="3" y="3" width="154" height="54" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="83" y1="3" x2="83" y2="57" stroke="black" stroke-width="1"/>
+  <path d="M3,57 A80,80 0 0,0 83,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
+  <path d="M83,57 A80,80 0 0,1 157,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'pax-100',
+        label: 'PAX 100×58',
+        defaultW: 100, defaultH: 58,
+        realW_cm: 100, realH_cm: 58,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 58">
+  <rect x="2" y="2" width="96" height="54" fill="white" stroke="black" stroke-width="2"/>
+  <!-- rail avant -->
+  <line x1="2" y1="52" x2="98" y2="52" stroke="black" stroke-width="1.5"/>
+  <!-- rail arrière -->
+  <line x1="2" y1="8"  x2="98" y2="8"  stroke="black" stroke-width="1"/>
+  <!-- panneau gauche coulissant -->
+  <rect x="4"  y="8" width="46" height="44" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,2"/>
+  <!-- panneau droit coulissant -->
+  <rect x="50" y="8" width="46" height="44" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,2"/>
+  <!-- poignée gauche -->
+  <line x1="42" y1="26" x2="42" y2="34" stroke="black" stroke-width="2"/>
+  <!-- poignée droite -->
+  <line x1="58" y1="26" x2="58" y2="34" stroke="black" stroke-width="2"/>
+</svg>`
+      },
+      {
+        id: 'pax-50',
+        label: 'PAX 50×58',
+        defaultW: 50, defaultH: 58,
+        realW_cm: 50, realH_cm: 58,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 58">
+  <rect x="2" y="2" width="46" height="54" fill="white" stroke="black" stroke-width="2"/>
+  <!-- rail avant -->
+  <line x1="2" y1="52" x2="48" y2="52" stroke="black" stroke-width="1.5"/>
+  <!-- rail arrière -->
+  <line x1="2" y1="8"  x2="48" y2="8"  stroke="black" stroke-width="1"/>
+  <!-- panneau coulissant unique -->
+  <rect x="4" y="8" width="42" height="44" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,2"/>
+  <!-- poignée -->
+  <line x1="22" y1="26" x2="22" y2="34" stroke="black" stroke-width="2"/>
+</svg>`
+      }
+    ]
+  },
+
+  // ── Séjour & bureau ───────────────────────────────────────────
+  {
+    id: 'sejour',
+    label: '🛋️ Séjour & bureau',
+    symbols: [
+      {
+        id: 'canape',
+        label: 'Canapé 3 places',
+        defaultW: 210, defaultH: 90,
+        realW_cm: 220, realH_cm: 90,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 90">
+  <rect x="4" y="4" width="202" height="30" rx="6" fill="#ddd" stroke="black" stroke-width="2"/>
+  <rect x="4" y="34" width="202" height="42" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="4" y="34" width="18" height="42" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
+  <rect x="188" y="34" width="18" height="42" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
+  <line x1="74" y1="34" x2="74" y2="76" stroke="black" stroke-width="1"/>
+  <line x1="136" y1="34" x2="136" y2="76" stroke="black" stroke-width="1"/>
+</svg>`
+      },
+      {
+        id: 'canape-angle',
+        label: 'Canapé angle',
+        defaultW: 160, defaultH: 160,
+        realW_cm: 240, realH_cm: 240,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+  <path d="M3,3 L157,3 L157,90 L90,90 L90,157 L3,157 Z" fill="white" stroke="black" stroke-width="2"/>
+  <path d="M14,14 L146,14 L146,79 L79,79 L79,146 L14,146 Z" fill="none" stroke="black" stroke-width="1"/>
+  <rect x="3" y="3" width="18" height="87" rx="4" fill="none" stroke="black" stroke-width="1.5"/>
+  <rect x="3" y="139" width="87" height="18" rx="4" fill="none" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'fauteuil',
+        label: 'Fauteuil',
+        defaultW: 80, defaultH: 80,
+        realW_cm: 80, realH_cm: 80,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <rect x="8" y="4" width="64" height="18" rx="6" fill="#ddd" stroke="black" stroke-width="2"/>
+  <rect x="8" y="22" width="64" height="44" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="4" y="22" width="12" height="44" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
+  <rect x="64" y="22" width="12" height="44" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'table-basse',
+        label: 'Table basse',
+        defaultW: 120, defaultH: 60,
+        realW_cm: 120, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">
+  <g transform="scale(0.923,0.75)">
+  <rect x="3" y="3" width="124" height="74" rx="5" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="10" y="10" width="110" height="60" rx="3" fill="none" stroke="black" stroke-width="1"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'tv-murale',
+        label: 'TV murale',
+        defaultW: 120, defaultH: 12,
+        realW_cm: 120, realH_cm: 12,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 12">
+  <g transform="scale(0.8,0.4)">
+  <rect x="3" y="3" width="144" height="24" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="8" y="7" width="134" height="16" fill="none" stroke="black" stroke-width="1"/>
+  <line x1="3" y1="3" x2="147" y2="27" stroke="black" stroke-width="0.5"/>
+  <line x1="147" y1="3" x2="3" y2="27" stroke="black" stroke-width="0.5"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'tv-meuble',
+        label: 'Meuble TV',
+        defaultW: 160, defaultH: 55,
+        realW_cm: 160, realH_cm: 45,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 55">
+  <rect x="3" y="3" width="154" height="49" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="8" y="8" width="64" height="39" fill="none" stroke="black" stroke-width="1"/>
+  <rect x="80" y="8" width="74" height="39" fill="none" stroke="black" stroke-width="1"/>
+  <line x1="3" y1="46" x2="157" y2="46" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'table-ronde',
+        label: 'Table ronde',
+        defaultW: 110, defaultH: 110,
+        realW_cm: 110, realH_cm: 110,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 110">
+  <circle cx="55" cy="55" r="48" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="40" y="2" width="30" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="40" y="94" width="30" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="2" y="40" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="94" y="40" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'table-rect',
+        label: 'Table rectangulaire',
+        defaultW: 160, defaultH: 80,
+        realW_cm: 160, realH_cm: 80,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80">
+  <g transform="scale(1,0.889)">
+  <rect x="22" y="22" width="116" height="46" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="36" y="5" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="100" y="5" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="36" y="71" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="100" y="71" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="5" y="30" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="141" y="30" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'table-a-manger',
+        label: 'Table à manger',
+        defaultW: 200, defaultH: 90,
+        realW_cm: 200, realH_cm: 90,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 90">
+  <g transform="scale(1,0.818)">
+  <rect x="24" y="22" width="152" height="66" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="30" y="5"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="86" y="5"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="142" y="5" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="30" y="91"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="86" y="91"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="142" y="91" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="5"   y="38" width="14" height="34" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="181" y="38" width="14" height="34" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'chaise',
+        label: 'Chaise',
+        defaultW: 45, defaultH: 45,
+        realW_cm: 45, realH_cm: 45,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+  <g transform="scale(1,0.9)">
+  <rect x="5" y="4" width="35" height="14" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
+  <rect x="5" y="18" width="35" height="28" rx="4" fill="white" stroke="black" stroke-width="1.5"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'tabouret',
+        label: 'Tabouret',
+        defaultW: 50, defaultH: 50,
+        realW_cm: 40, realH_cm: 40,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50">
+  <circle cx="25" cy="25" r="21" fill="white" stroke="black" stroke-width="2"/>
+  <circle cx="25" cy="25" r="10" fill="none" stroke="black" stroke-width="1"/>
+  <line x1="10" y1="10" x2="40" y2="40" stroke="black" stroke-width="1"/>
+  <line x1="40" y1="10" x2="10" y2="40" stroke="black" stroke-width="1"/>
+</svg>`
+      },
+      {
+        id: 'bureau',
+        label: 'Bureau',
+        defaultW: 140, defaultH: 70,
+        realW_cm: 140, realH_cm: 70,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 70">
+  <rect x="4" y="4" width="132" height="62" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="100" y="10" width="30" height="20" rx="2" fill="none" stroke="black" stroke-width="1.5"/>
+  <rect x="100" y="34" width="30" height="24" rx="2" fill="none" stroke="black" stroke-width="1.5"/>
+  <line x1="112" y1="20" x2="120" y2="20" stroke="black" stroke-width="1.5"/>
+  <line x1="112" y1="46" x2="120" y2="46" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'bureau-angle',
+        label: 'Bureau angle',
+        defaultW: 160, defaultH: 160,
+        realW_cm: 160, realH_cm: 160,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+  <path d="M3,3 L157,3 L157,80 L80,80 L80,157 L3,157 Z" fill="white" stroke="black" stroke-width="2"/>
+  <path d="M3,67 L67,67 L67,157" fill="none" stroke="black" stroke-width="1.5"/>
+</svg>`
+      }
+    ]
+  },
+
+  // ── Cuisine ───────────────────────────────────────────────────
   {
     id: 'cuisine',
     label: '🍳 Cuisine',
@@ -440,6 +403,19 @@ const SYMBOL_CATEGORIES = [
   <line x1="3" y1="66" x2="77" y2="66" stroke="black" stroke-width="2"/>
   <line x1="3" y1="72" x2="77" y2="72" stroke="black" stroke-width="1"/>
   <circle cx="40" cy="69" r="2.5" fill="black"/>
+</svg>`
+      },
+      {
+        id: 'meuble-bas-120',
+        label: 'Meuble bas 120',
+        defaultW: 160, defaultH: 80,
+        realW_cm: 120, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80">
+  <rect x="3" y="3" width="154" height="74" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="3" y1="66" x2="157" y2="66" stroke="black" stroke-width="2"/>
+  <line x1="80" y1="3" x2="80" y2="66" stroke="black" stroke-width="1"/>
+  <circle cx="62" cy="69" r="2.5" fill="black"/>
+  <circle cx="98" cy="69" r="2.5" fill="black"/>
 </svg>`
       },
       {
@@ -479,19 +455,6 @@ const SYMBOL_CATEGORIES = [
 </svg>`
       },
       {
-        id: 'meuble-bas-120',
-        label: 'Meuble bas 120',
-        defaultW: 160, defaultH: 80,
-        realW_cm: 120, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80">
-  <rect x="3" y="3" width="154" height="74" fill="white" stroke="black" stroke-width="2"/>
-  <line x1="3" y1="66" x2="157" y2="66" stroke="black" stroke-width="2"/>
-  <line x1="80" y1="3" x2="80" y2="66" stroke="black" stroke-width="1"/>
-  <circle cx="62" cy="69" r="2.5" fill="black"/>
-  <circle cx="98" cy="69" r="2.5" fill="black"/>
-</svg>`
-      },
-      {
         id: 'plan-travail-angle',
         label: 'Angle plan de travail',
         defaultW: 120, defaultH: 120,
@@ -500,6 +463,55 @@ const SYMBOL_CATEGORIES = [
   <path d="M3,3 L117,3 L117,57 L57,57 L57,117 L3,117 Z" fill="white" stroke="black" stroke-width="2"/>
   <path d="M3,51 L51,51 L51,117" fill="none" stroke="black" stroke-width="1.5"/>
   <path d="M3,57 L57,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
+</svg>`
+      },
+      {
+        id: 'evier-simple-60',
+        label: 'Évier simple 60',
+        defaultW: 60, defaultH: 50,
+        realW_cm: 60, realH_cm: 50,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 50">
+  <g transform="scale(0.75,0.625)">
+  <rect x="3" y="3" width="74" height="74" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="10" y="10" width="60" height="60" rx="5" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="40" cy="40" r="8" fill="none" stroke="black" stroke-width="1.5"/>
+  <line x1="32" y1="40" x2="48" y2="40" stroke="black" stroke-width="1"/>
+  <line x1="40" y1="32" x2="40" y2="48" stroke="black" stroke-width="1"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'evier-double',
+        label: 'Évier double',
+        defaultW: 120, defaultH: 50,
+        realW_cm: 120, realH_cm: 50,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 50">
+  <g transform="scale(1,0.909)">
+  <rect x="4" y="4" width="112" height="47" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="10" y="10" width="46" height="35" rx="3" fill="none" stroke="black" stroke-width="1.5"/>
+  <rect x="64" y="10" width="46" height="35" rx="3" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="33" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="87" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="60" cy="8" r="3" fill="black"/>
+  <line x1="52" y1="8" x2="68" y2="8" stroke="black" stroke-width="2"/>
+  </g>
+</svg>`
+      },
+      {
+        id: 'plaque',
+        label: 'Plaque cuisson',
+        defaultW: 80, defaultH: 80,
+        realW_cm: 60, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <rect x="4" y="4" width="72" height="72" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <circle cx="22" cy="22" r="12" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="22" cy="22" r="5" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="58" cy="22" r="12" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="58" cy="22" r="5" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="22" cy="58" r="12" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="22" cy="58" r="5" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="58" cy="58" r="12" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="58" cy="58" r="5" fill="none" stroke="black" stroke-width="1.5"/>
 </svg>`
       },
       {
@@ -542,136 +554,61 @@ const SYMBOL_CATEGORIES = [
 </svg>`
       },
       {
-        id: 'evier-simple-60',
-        label: 'Évier simple 60',
-        defaultW: 60, defaultH: 50,
-        realW_cm: 60, realH_cm: 50,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 50">
-  <g transform="scale(0.75,0.625)">
-  <rect x="3" y="3" width="74" height="74" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="10" y="10" width="60" height="60" rx="5" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="40" cy="40" r="8" fill="none" stroke="black" stroke-width="1.5"/>
-  <line x1="32" y1="40" x2="48" y2="40" stroke="black" stroke-width="1"/>
-  <line x1="40" y1="32" x2="40" y2="48" stroke="black" stroke-width="1"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'lave-linge',
-        label: 'Lave-linge',
-        defaultW: 80, defaultH: 80,
-        realW_cm: 60, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
-  <rect x="3" y="3" width="74" height="74" fill="white" stroke="black" stroke-width="2"/>
-  <circle cx="40" cy="42" r="26" fill="none" stroke="black" stroke-width="1.5"/>
-  <circle cx="40" cy="42" r="18" fill="none" stroke="black" stroke-width="1"/>
-  <rect x="10" y="8" width="28" height="8" rx="2" fill="none" stroke="black" stroke-width="1"/>
-  <circle cx="62" cy="12" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+        id: 'frigo',
+        label: 'Réfrigérateur',
+        defaultW: 70, defaultH: 80,
+        realW_cm: 60, realH_cm: 65,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 80">
+  <rect x="4" y="4" width="62" height="72" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="4" y1="32" x2="66" y2="32" stroke="black" stroke-width="1.5"/>
+  <line x1="52" y1="12" x2="52" y2="28" stroke="black" stroke-width="2.5"/>
+  <line x1="52" y1="40" x2="52" y2="70" stroke="black" stroke-width="2.5"/>
 </svg>`
       }
     ]
   },
 
-  // ── Mobilier complémentaire ───────────────────────────────────
+  // ── Salle de bain ─────────────────────────────────────────────
   {
-    id: 'mobilier2',
-    label: '🪑 Mobilier complémentaire',
+    id: 'sdb',
+    label: '🚿 Salle de bain',
     symbols: [
       {
-        id: 'tabouret',
-        label: 'Tabouret',
-        defaultW: 50, defaultH: 50,
-        realW_cm: 40, realH_cm: 40,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50">
-  <circle cx="25" cy="25" r="21" fill="white" stroke="black" stroke-width="2"/>
-  <circle cx="25" cy="25" r="10" fill="none" stroke="black" stroke-width="1"/>
-  <line x1="10" y1="10" x2="40" y2="40" stroke="black" stroke-width="1"/>
-  <line x1="40" y1="10" x2="10" y2="40" stroke="black" stroke-width="1"/>
-</svg>`
-      },
-      {
-        id: 'tv-murale',
-        label: 'TV murale',
-        defaultW: 120, defaultH: 12,
-        realW_cm: 120, realH_cm: 12,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 12">
-  <g transform="scale(0.8,0.4)">
-  <rect x="3" y="3" width="144" height="24" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="8" y="7" width="134" height="16" fill="none" stroke="black" stroke-width="1"/>
-  <line x1="3" y1="3" x2="147" y2="27" stroke="black" stroke-width="0.5"/>
-  <line x1="147" y1="3" x2="3" y2="27" stroke="black" stroke-width="0.5"/>
+        id: 'wc',
+        label: 'WC',
+        defaultW: 37, defaultH: 65,
+        realW_cm: 37, realH_cm: 65,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 37 65">
+  <g transform="scale(0.617,0.8125)">
+  <rect x="4" y="4" width="52" height="18" rx="3" fill="white" stroke="black" stroke-width="2"/>
+  <path d="M8,22 L52,22 Q56,22 56,50 Q56,76 30,76 Q4,76 4,50 Q4,22 8,22 Z" fill="white" stroke="black" stroke-width="2"/>
+  <ellipse cx="30" cy="50" rx="16" ry="20" fill="none" stroke="black" stroke-width="1.5"/>
   </g>
 </svg>`
       },
       {
-        id: 'tv-meuble',
-        label: 'Meuble TV',
-        defaultW: 160, defaultH: 55,
-        realW_cm: 160, realH_cm: 45,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 55">
-  <rect x="3" y="3" width="154" height="49" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="8" y="8" width="64" height="39" fill="none" stroke="black" stroke-width="1"/>
-  <rect x="80" y="8" width="74" height="39" fill="none" stroke="black" stroke-width="1"/>
-  <line x1="3" y1="46" x2="157" y2="46" stroke="black" stroke-width="1.5"/>
+        id: 'lavabo',
+        label: 'Lavabo',
+        defaultW: 65, defaultH: 50,
+        realW_cm: 60, realH_cm: 45,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 65 50">
+  <rect x="4" y="4" width="57" height="42" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <ellipse cx="32" cy="28" rx="19" ry="13" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="32" cy="11" r="3" fill="black"/>
+  <line x1="24" y1="11" x2="40" y2="11" stroke="black" stroke-width="2"/>
 </svg>`
       },
       {
-        id: 'canape-angle',
-        label: 'Canapé angle',
-        defaultW: 160, defaultH: 160,
-        realW_cm: 240, realH_cm: 240,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
-  <path d="M3,3 L157,3 L157,90 L90,90 L90,157 L3,157 Z" fill="white" stroke="black" stroke-width="2"/>
-  <path d="M14,14 L146,14 L146,79 L79,79 L79,146 L14,146 Z" fill="none" stroke="black" stroke-width="1"/>
-  <rect x="3" y="3" width="18" height="87" rx="4" fill="none" stroke="black" stroke-width="1.5"/>
-  <rect x="3" y="139" width="87" height="18" rx="4" fill="none" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'table-basse',
-        label: 'Table basse',
-        defaultW: 120, defaultH: 60,
-        realW_cm: 120, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">
-  <g transform="scale(0.923,0.75)">
-  <rect x="3" y="3" width="124" height="74" rx="5" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="10" y="10" width="110" height="60" rx="3" fill="none" stroke="black" stroke-width="1"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'dressing',
-        label: 'Dressing',
-        defaultW: 200, defaultH: 60,
-        realW_cm: 200, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
-  <g transform="scale(1.25,1)">
-  <rect x="3" y="3" width="154" height="54" fill="white" stroke="black" stroke-width="2"/>
-  <line x1="83" y1="3" x2="83" y2="57" stroke="black" stroke-width="1"/>
-  <path d="M3,57 A80,80 0 0,0 83,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
-  <path d="M83,57 A80,80 0 0,1 157,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
-  </g>
-</svg>`
-      },
-      {
-        id: 'bureau-angle',
-        label: 'Bureau angle',
-        defaultW: 160, defaultH: 160,
-        realW_cm: 160, realH_cm: 160,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
-  <path d="M3,3 L157,3 L157,80 L80,80 L80,157 L3,157 Z" fill="white" stroke="black" stroke-width="2"/>
-  <path d="M3,67 L67,67 L67,157" fill="none" stroke="black" stroke-width="1.5"/>
-</svg>`
-      },
-      {
-        id: 'lit-enfant',
-        label: 'Lit enfant',
-        defaultW: 80, defaultH: 160,
-        realW_cm: 70, realH_cm: 140,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 160">
-  <rect x="3" y="3" width="74" height="154" rx="5" fill="white" stroke="black" stroke-width="2"/>
-  <rect x="3" y="3" width="74" height="20" rx="5" fill="none" stroke="black" stroke-width="2"/>
-  <line x1="3" y1="143" x2="77" y2="143" stroke="black" stroke-width="1.5"/>
+        id: 'baignoire',
+        label: 'Baignoire',
+        defaultW: 70, defaultH: 160,
+        realW_cm: 70, realH_cm: 160,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 160">
+  <rect x="4" y="4" width="62" height="152" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <ellipse cx="35" cy="88" rx="25" ry="58" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="35" cy="18" r="5" fill="black"/>
+  <circle cx="22" cy="18" r="3" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="48" cy="18" r="3" fill="none" stroke="black" stroke-width="1.5"/>
 </svg>`
       },
       {
@@ -686,6 +623,94 @@ const SYMBOL_CATEGORIES = [
   <line x1="50" y1="2" x2="50" y2="10" stroke="black" stroke-width="1"/>
   <line x1="80" y1="2" x2="80" y2="10" stroke="black" stroke-width="1"/>
   </g>
+</svg>`
+      },
+      {
+        id: 'douche',
+        label: 'Douche',
+        defaultW: 90, defaultH: 90,
+        realW_cm: 90, realH_cm: 90,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90">
+  <rect x="4" y="4" width="82" height="82" fill="white" stroke="black" stroke-width="2"/>
+  <path d="M4,4 Q4,20 20,20 L4,20 Z" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="12" cy="12" r="5" fill="none" stroke="black" stroke-width="1.5"/>
+  <line x1="12" y1="7" x2="12" y2="4" stroke="black" stroke-width="1"/>
+  <line x1="17" y1="12" x2="20" y2="12" stroke="black" stroke-width="1"/>
+  <line x1="15.5" y1="8.5" x2="17.5" y2="6.5" stroke="black" stroke-width="1"/>
+  <line x1="4" y1="86" x2="86" y2="86" stroke="black" stroke-width="1"/>
+  <line x1="4" y1="86" x2="4" y2="4" stroke="black" stroke-width="1"/>
+</svg>`
+      },
+      {
+        id: 'bidet',
+        label: 'Bidet',
+        defaultW: 45, defaultH: 70,
+        realW_cm: 37, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 70">
+  <path d="M6,4 L39,4 Q41,4 41,20 Q41,66 22.5,66 Q4,66 4,20 Q4,4 6,4 Z" fill="white" stroke="black" stroke-width="2"/>
+  <ellipse cx="22.5" cy="38" rx="13" ry="22" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="22.5" cy="10" r="3" fill="black"/>
+  <line x1="16" y1="10" x2="29" y2="10" stroke="black" stroke-width="2"/>
+</svg>`
+      },
+      {
+        id: 'lave-linge',
+        label: 'Lave-linge',
+        defaultW: 80, defaultH: 80,
+        realW_cm: 60, realH_cm: 60,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <rect x="3" y="3" width="74" height="74" fill="white" stroke="black" stroke-width="2"/>
+  <circle cx="40" cy="42" r="26" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="40" cy="42" r="18" fill="none" stroke="black" stroke-width="1"/>
+  <rect x="10" y="8" width="28" height="8" rx="2" fill="none" stroke="black" stroke-width="1"/>
+  <circle cx="62" cy="12" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'evier',
+        label: 'Évier simple',
+        defaultW: 70, defaultH: 55,
+        realW_cm: 60, realH_cm: 50,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 55">
+  <rect x="4" y="4" width="62" height="47" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="10" y="10" width="50" height="35" rx="4" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="35" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
+  <circle cx="35" cy="8" r="3" fill="black"/>
+  <line x1="28" y1="8" x2="42" y2="8" stroke="black" stroke-width="2"/>
+</svg>`
+      },
+      {
+        id: 'chauffe-eau',
+        label: 'Chauffe-eau',
+        defaultW: 60, defaultH: 60,
+        realW_cm: 45, realH_cm: 45,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60">
+  <circle cx="30" cy="30" r="26" fill="white" stroke="black" stroke-width="2"/>
+  <circle cx="30" cy="30" r="18" fill="none" stroke="black" stroke-width="1.5"/>
+  <text x="30" y="35" text-anchor="middle" font-size="10" font-family="sans-serif" fill="black">CE</text>
+</svg>`
+      }
+    ]
+  },
+
+  // ── Équipements ───────────────────────────────────────────────
+  {
+    id: 'equipements',
+    label: '🔧 Équipements',
+    symbols: [
+      {
+        id: 'radiateur',
+        label: 'Radiateur',
+        defaultW: 140, defaultH: 18,
+        realW_cm: 140, realH_cm: 18,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 18">
+  <rect x="2" y="2" width="136" height="14" fill="white" stroke="black" stroke-width="1.5"/>
+  <line x1="22" y1="2" x2="22" y2="16" stroke="black" stroke-width="1"/>
+  <line x1="42" y1="2" x2="42" y2="16" stroke="black" stroke-width="1"/>
+  <line x1="62" y1="2" x2="62" y2="16" stroke="black" stroke-width="1"/>
+  <line x1="82" y1="2" x2="82" y2="16" stroke="black" stroke-width="1"/>
+  <line x1="102" y1="2" x2="102" y2="16" stroke="black" stroke-width="1"/>
+  <line x1="118" y1="2" x2="118" y2="16" stroke="black" stroke-width="1"/>
 </svg>`
       }
     ]
@@ -780,7 +805,6 @@ const SYMBOL_CATEGORIES = [
         defaultW: 120, defaultH: 80,
         realW_cm: null, realH_cm: null,
         svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
-  <!-- Nuage convexe : arcs sweep=1 (sens horaire) → bosses vers l'extérieur -->
   <path d="M 10 15 A 17 17 0 0 1 43 15 A 17 17 0 0 1 76 15 A 17 17 0 0 1 110 15
            A 13 13 0 0 1 110 40 A 13 13 0 0 1 110 65
            A 17 17 0 0 1 77 65 A 17 17 0 0 1 44 65 A 17 17 0 0 1 10 65
