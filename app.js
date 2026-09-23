@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.8.2';   // Hors ligne (service worker), CI, fixture synthétique
+const APP_VERSION  = '1.8.3';   // Fond transparent des symboles, gel annotations mesure, barre de style
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -3873,7 +3873,7 @@ function applyStyleToObject(obj, props) {
     if ('stroke' in props)      recolorSymbolObjects(kids, props.stroke);
     if ('strokeWidth' in props) kids.forEach(k => { if (k.stroke && k.stroke !== 'none') k.set('strokeWidth', props.strokeWidth); });
     if ('opacity' in props)     obj.set('opacity', props.opacity);
-    // `fill` volontairement ignoré : il écraserait le fond blanc du symbole
+    if ('fill' in props)        kids.forEach(k => { if (k.fill !== 'none') k.set('fill', props.fill); });
   } else if (kids && kind === 'dimension') {
     kids.forEach(k => {
       const isTxt = k.type === 'text' || k.type === 'i-text' || k.type === 'textbox';
@@ -3897,9 +3897,7 @@ function applyStyleToObject(obj, props) {
     });
     if ('opacity' in props) obj.set('opacity', props.opacity);
   } else if (kind === 'symbol') {
-    // Symbole natif (polygone, chemin, ellipse) : le fond blanc reste, le trait change
-    const { fill, ...rest } = props;
-    obj.set(rest);
+    obj.set(props);
   } else {
     obj.set(props);
     if ('fill' in props) obj.set('perPixelTargetFind', isTransparentFill(props.fill));
