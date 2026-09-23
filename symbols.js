@@ -179,6 +179,22 @@ const SYMBOL_CATEGORIES = [
 </svg>`
       },
       {
+        id: 'commode',
+        label: 'Commode / Buffet',
+        defaultW: 100, defaultH: 45,
+        realW_cm: 100, realH_cm: 45,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 45">
+  <rect x="2" y="2" width="96" height="41" fill="white" stroke="black" stroke-width="2"/>
+  <!-- 3 tiroirs -->
+  <line x1="2"  y1="15" x2="98" y2="15" stroke="black" stroke-width="1"/>
+  <line x1="2"  y1="28" x2="98" y2="28" stroke="black" stroke-width="1"/>
+  <!-- poignées -->
+  <line x1="42" y1="9"  x2="58" y2="9"  stroke="black" stroke-width="2"/>
+  <line x1="42" y1="21" x2="58" y2="21" stroke="black" stroke-width="2"/>
+  <line x1="42" y1="35" x2="58" y2="35" stroke="black" stroke-width="2"/>
+</svg>`
+      },
+      {
         id: 'pax-100',
         label: 'PAX 100×58',
         defaultW: 100, defaultH: 58,
