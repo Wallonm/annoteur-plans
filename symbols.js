@@ -11,12 +11,14 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'wc',
         label: 'WC',
-        defaultW: 60, defaultH: 80,
+        defaultW: 37, defaultH: 65,
         realW_cm: 37, realH_cm: 65,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 80">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 37 65">
+  <g transform="scale(0.617,0.8125)">
   <rect x="4" y="4" width="52" height="18" rx="3" fill="white" stroke="black" stroke-width="2"/>
   <path d="M8,22 L52,22 Q56,22 56,50 Q56,76 30,76 Q4,76 4,50 Q4,22 8,22 Z" fill="white" stroke="black" stroke-width="2"/>
   <ellipse cx="30" cy="50" rx="16" ry="20" fill="none" stroke="black" stroke-width="1.5"/>
+  </g>
 </svg>`
       },
       {
@@ -95,16 +97,16 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'lit-double',
         label: 'Lit double',
-        defaultW: 160, defaultH: 190,
+        defaultW: 140, defaultH: 200,
         realW_cm: 140, realH_cm: 200,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 190">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 200">
+  <g transform="scale(0.875,1.053)">
   <rect x="4" y="4" width="152" height="182" rx="4" fill="white" stroke="black" stroke-width="2"/>
   <rect x="4" y="4" width="152" height="28" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
-  <!-- Séparation milieu -->
   <line x1="80" y1="32" x2="80" y2="186" stroke="black" stroke-width="1" stroke-dasharray="4,4"/>
-  <!-- Oreillers -->
   <rect x="14" y="38" width="55" height="35" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
   <rect x="91" y="38" width="55" height="35" rx="8" fill="white" stroke="black" stroke-width="1.5"/>
+  </g>
 </svg>`
       },
       {
@@ -142,18 +144,18 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'table-rect',
         label: 'Table rectangulaire',
-        defaultW: 160, defaultH: 90,
+        defaultW: 160, defaultH: 80,
         realW_cm: 160, realH_cm: 80,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80">
+  <g transform="scale(1,0.889)">
   <rect x="22" y="22" width="116" height="46" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Chaises haut/bas -->
   <rect x="36" y="5" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="100" y="5" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="36" y="71" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="100" y="71" width="24" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <!-- Chaises gauche/droite -->
   <rect x="5" y="30" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="141" y="30" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  </g>
 </svg>`
       },
       {
@@ -187,11 +189,13 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'chaise',
         label: 'Chaise',
-        defaultW: 45, defaultH: 50,
+        defaultW: 45, defaultH: 45,
         realW_cm: 45, realH_cm: 45,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 50">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+  <g transform="scale(1,0.9)">
   <rect x="5" y="4" width="35" height="14" rx="4" fill="#ddd" stroke="black" stroke-width="1.5"/>
   <rect x="5" y="18" width="35" height="28" rx="4" fill="white" stroke="black" stroke-width="1.5"/>
+  </g>
 </svg>`
       },
       {
@@ -213,22 +217,20 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'table-a-manger',
         label: 'Table à manger',
-        defaultW: 200, defaultH: 110,
+        defaultW: 200, defaultH: 90,
         realW_cm: 200, realH_cm: 90,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 110">
-  <!-- Table -->
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 90">
+  <g transform="scale(1,0.818)">
   <rect x="24" y="22" width="152" height="66" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Chaises haut (3) -->
   <rect x="30" y="5"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="86" y="5"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="142" y="5" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <!-- Chaises bas (3) -->
   <rect x="30" y="91"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="86" y="91"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="142" y="91" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
-  <!-- Chaises gauche/droite (1 chacun) -->
   <rect x="5"   y="38" width="14" height="34" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
   <rect x="181" y="38" width="14" height="34" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  </g>
 </svg>`
       }
     ]
@@ -268,9 +270,10 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'evier-double',
         label: 'Évier double',
-        defaultW: 120, defaultH: 55,
+        defaultW: 120, defaultH: 50,
         realW_cm: 120, realH_cm: 50,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 55">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 50">
+  <g transform="scale(1,0.909)">
   <rect x="4" y="4" width="112" height="47" rx="4" fill="white" stroke="black" stroke-width="2"/>
   <rect x="10" y="10" width="46" height="35" rx="3" fill="none" stroke="black" stroke-width="1.5"/>
   <rect x="64" y="10" width="46" height="35" rx="3" fill="none" stroke="black" stroke-width="1.5"/>
@@ -278,6 +281,7 @@ const SYMBOL_CATEGORIES = [
   <circle cx="87" cy="27.5" r="4" fill="none" stroke="black" stroke-width="1.5"/>
   <circle cx="60" cy="8" r="3" fill="black"/>
   <line x1="52" y1="8" x2="68" y2="8" stroke="black" stroke-width="2"/>
+  </g>
 </svg>`
       },
       {
@@ -344,18 +348,17 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'porte-double',
         label: 'Porte double',
-        defaultW: 160, defaultH: 90,
+        defaultW: 160, defaultH: 83,
         realW_cm: 160, realH_cm: 83,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 83">
+  <g transform="scale(1,0.922)">
   <line x1="4" y1="4" x2="4" y2="86" stroke="black" stroke-width="8"/>
   <line x1="156" y1="4" x2="156" y2="86" stroke="black" stroke-width="8"/>
-  <!-- Vantaux -->
   <line x1="4" y1="4" x2="82" y2="4" stroke="black" stroke-width="3"/>
   <line x1="78" y1="4" x2="156" y2="4" stroke="black" stroke-width="3"/>
-  <!-- Arc gauche : extrémité (82,4) → charnière bas (4,82), CW -->
   <path d="M 82 4 A 78 78 0 0 1 4 82" fill="none" stroke="black" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <!-- Arc droit : extrémité (78,4) → charnière bas (156,82), CCW -->
   <path d="M 78 4 A 78 78 0 0 0 156 82" fill="none" stroke="black" stroke-width="1.5" stroke-dasharray="4,3"/>
+  </g>
 </svg>`
       },
       {
@@ -374,11 +377,11 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'escalier',
         label: 'Escalier',
-        defaultW: 100, defaultH: 180,
+        defaultW: 100, defaultH: 270,
         realW_cm: 100, realH_cm: 270,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 180">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 270">
+  <g transform="scale(1,1.5)">
   <rect x="4" y="4" width="92" height="172" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Marches (lignes horizontales) -->
   <line x1="4" y1="22" x2="96" y2="22" stroke="black" stroke-width="1"/>
   <line x1="4" y1="40" x2="96" y2="40" stroke="black" stroke-width="1"/>
   <line x1="4" y1="58" x2="96" y2="58" stroke="black" stroke-width="1"/>
@@ -388,9 +391,9 @@ const SYMBOL_CATEGORIES = [
   <line x1="4" y1="130" x2="96" y2="130" stroke="black" stroke-width="1"/>
   <line x1="4" y1="148" x2="96" y2="148" stroke="black" stroke-width="1"/>
   <line x1="4" y1="166" x2="96" y2="166" stroke="black" stroke-width="1"/>
-  <!-- Flèche montée -->
   <line x1="50" y1="170" x2="50" y2="10" stroke="black" stroke-width="1.5"/>
   <polygon points="50,6 44,16 56,16" fill="black"/>
+  </g>
 </svg>`
       },
       {
@@ -405,20 +408,18 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'cheminee',
         label: 'Cheminée',
-        defaultW: 120, defaultH: 50,
+        defaultW: 120, defaultH: 40,
         realW_cm: 120, realH_cm: 40,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 50">
-  <!-- Corps de la cheminée (vue de dessus) -->
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
+  <g transform="scale(1,0.8)">
   <rect x="3" y="3" width="114" height="44" fill="white" stroke="black" stroke-width="2"/>
-  <!-- Foyer (ouverture) -->
   <rect x="22" y="10" width="76" height="24" rx="3" fill="#ccc" stroke="black" stroke-width="1.5"/>
-  <!-- Hâtre (fond du foyer) -->
   <rect x="30" y="15" width="60" height="14" fill="#888" stroke="black" stroke-width="1"/>
-  <!-- Joues latérales -->
   <line x1="22" y1="10" x2="3"   y2="3"  stroke="black" stroke-width="1"/>
   <line x1="98" y1="10" x2="117" y2="3"  stroke="black" stroke-width="1"/>
   <line x1="22" y1="34" x2="3"   y2="47" stroke="black" stroke-width="1"/>
   <line x1="98" y1="34" x2="117" y2="47" stroke="black" stroke-width="1"/>
+  </g>
 </svg>`
       }
     ]
@@ -444,12 +445,14 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'meuble-haut-60',
         label: 'Meuble haut 60',
-        defaultW: 80, defaultH: 40,
+        defaultW: 60, defaultH: 35,
         realW_cm: 60, realH_cm: 35,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 35">
+  <g transform="scale(0.75,0.875)">
   <rect x="3" y="3" width="74" height="34" fill="white" stroke="black" stroke-width="2" stroke-dasharray="6,3"/>
   <line x1="3" y1="29" x2="77" y2="29" stroke="black" stroke-width="1.5" stroke-dasharray="6,3"/>
   <circle cx="40" cy="32" r="2" fill="black"/>
+  </g>
 </svg>`
       },
       {
@@ -541,14 +544,16 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'evier-simple-60',
         label: 'Évier simple 60',
-        defaultW: 80, defaultH: 80,
+        defaultW: 60, defaultH: 50,
         realW_cm: 60, realH_cm: 50,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 50">
+  <g transform="scale(0.75,0.625)">
   <rect x="3" y="3" width="74" height="74" fill="white" stroke="black" stroke-width="2"/>
   <rect x="10" y="10" width="60" height="60" rx="5" fill="none" stroke="black" stroke-width="1.5"/>
   <circle cx="40" cy="40" r="8" fill="none" stroke="black" stroke-width="1.5"/>
   <line x1="32" y1="40" x2="48" y2="40" stroke="black" stroke-width="1"/>
   <line x1="40" y1="32" x2="40" y2="48" stroke="black" stroke-width="1"/>
+  </g>
 </svg>`
       },
       {
@@ -587,13 +592,15 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'tv-murale',
         label: 'TV murale',
-        defaultW: 150, defaultH: 30,
+        defaultW: 120, defaultH: 12,
         realW_cm: 120, realH_cm: 12,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 30">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 12">
+  <g transform="scale(0.8,0.4)">
   <rect x="3" y="3" width="144" height="24" fill="white" stroke="black" stroke-width="2"/>
   <rect x="8" y="7" width="134" height="16" fill="none" stroke="black" stroke-width="1"/>
   <line x1="3" y1="3" x2="147" y2="27" stroke="black" stroke-width="0.5"/>
   <line x1="147" y1="3" x2="3" y2="27" stroke="black" stroke-width="0.5"/>
+  </g>
 </svg>`
       },
       {
@@ -623,23 +630,27 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'table-basse',
         label: 'Table basse',
-        defaultW: 130, defaultH: 80,
+        defaultW: 120, defaultH: 60,
         realW_cm: 120, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 80">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">
+  <g transform="scale(0.923,0.75)">
   <rect x="3" y="3" width="124" height="74" rx="5" fill="white" stroke="black" stroke-width="2"/>
   <rect x="10" y="10" width="110" height="60" rx="3" fill="none" stroke="black" stroke-width="1"/>
+  </g>
 </svg>`
       },
       {
         id: 'dressing',
         label: 'Dressing',
-        defaultW: 160, defaultH: 60,
+        defaultW: 200, defaultH: 60,
         realW_cm: 200, realH_cm: 60,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 60">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
+  <g transform="scale(1.25,1)">
   <rect x="3" y="3" width="154" height="54" fill="white" stroke="black" stroke-width="2"/>
   <line x1="83" y1="3" x2="83" y2="57" stroke="black" stroke-width="1"/>
   <path d="M3,57 A80,80 0 0,0 83,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
   <path d="M83,57 A80,80 0 0,1 157,3" fill="none" stroke="black" stroke-width="1" stroke-dasharray="4,3"/>
+  </g>
 </svg>`
       },
       {
@@ -666,13 +677,15 @@ const SYMBOL_CATEGORIES = [
       {
         id: 'barriere-bain',
         label: 'Pare-baignoire',
-        defaultW: 100, defaultH: 12,
+        defaultW: 100, defaultH: 10,
         realW_cm: 100, realH_cm: 10,
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 12">
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10">
+  <g transform="scale(1,0.833)">
   <rect x="2" y="2" width="96" height="8" fill="white" stroke="black" stroke-width="2"/>
   <line x1="20" y1="2" x2="20" y2="10" stroke="black" stroke-width="1"/>
   <line x1="50" y1="2" x2="50" y2="10" stroke="black" stroke-width="1"/>
   <line x1="80" y1="2" x2="80" y2="10" stroke="black" stroke-width="1"/>
+  </g>
 </svg>`
       }
     ]
