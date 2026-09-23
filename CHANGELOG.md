@@ -1,5 +1,12 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.8.3 — Bouton « Fond transparent » (23/09/2026)
+
+- Barre de style et panneau latéral : sur une zone de texte ou une étiquette de surface, « Fond » agit sur le cadre (`backgroundColor`). Avant, ∅ rendait le texte lui-même invisible et la couleur de fond recolorait les caractères.
+- Formes (rectangle, ellipse, nuage, polygone) : comportement inchangé.
+- Symboles, cotes, compteurs, bulles, tampons : bouton toujours désactivé (fond blanc structurel).
+- e2e : vérification « fond transparent » ajoutée (17 vérifications).
+
 ## v1.8.2 — Hors ligne, intégration continue, fixture synthétique
 
 - **Service worker** (`sw.js`) et manifeste : hébergée, l'app se met en cache à

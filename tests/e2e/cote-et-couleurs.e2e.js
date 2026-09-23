@@ -217,6 +217,24 @@ const server = http.createServer((q, r) => {
   });
   console.log(replaced.before > 0 && replaced.after === 0 && replaced.hist <= 1 ? 'OK  loadProject remplace l’état (objets et historique)' : 'FAIL loadProject ' + JSON.stringify(replaced));
 
+  // Bouton « Fond transparent » (∅) : forme → fill vidé ; texte → cadre vidé, caractères intacts
+  const fond = await page.evaluate(() => {
+    App.canvas.discardActiveObject();
+    const r = new fabric.Rect({ left: 50, top: 50, width: 80, height: 40, fill: '#ff0000', stroke: '#000', data: {} });
+    const t = new fabric.Textbox('Test', { left: 50, top: 150, width: 100, fill: '#123456', backgroundColor: '#ffff00', data: {} });
+    App.canvas.add(r, t);
+    const res = {};
+    for (const [k, o] of [['rect', r], ['texte', t]]) {
+      App.canvas.setActiveObject(o); App.canvas.fire('selection:created', { selected: [o] });
+      document.getElementById('sb-fill-none').click();
+      res[k] = { fill: o.fill, bg: o.backgroundColor, btn: document.getElementById('sb-fill-none').classList.contains('active') };
+    }
+    App.canvas.remove(r, t);
+    return res;
+  });
+  console.log(fond.rect.fill === 'transparent' && fond.texte.fill === '#123456' && fond.texte.bg === '' && fond.texte.btn
+    ? 'OK  fond transparent : forme vidée, texte conservé et cadre vidé' : 'FAIL fond transparent ' + JSON.stringify(fond));
+
   const realErrors = errors.filter(e => !/favicon|404/.test(e));
   console.log('Erreurs JS :', realErrors.length ? realErrors : 'aucune');
   if (realErrors.length) process.exitCode = 1;

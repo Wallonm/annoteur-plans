@@ -6,7 +6,7 @@
 // Une nouvelle version (CACHE_NAME changé) remplace l'ancienne au rechargement
 // suivant. Inerte quand la page est ouverte en file:// (pas de service worker).
 // ============================================================
-const CACHE_NAME = 'annoteur-v1.8.2';
+const CACHE_NAME = 'annoteur-v1.8.3';
 const FILES = [
   './', './index.html', './app.js', './geometry.js', './migrate.js',
   './export-vector.js', './tools-metier.js', './symbols.js',

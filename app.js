@@ -3638,7 +3638,7 @@ function updatePropsFromSelection() {
   }
 
   // Remplissage
-  const fill = st.compound ? 'transparent' : sel.fill;
+  const fill = st.compound ? 'transparent' : st.fill;
   const fillMode = document.getElementById('prop-fill-mode');
   const fillColor = document.getElementById('prop-fill-color');
   if (fill && fill !== 'transparent' && fill !== '' && fill !== 'rgba(0,0,0,0)') {
@@ -3773,11 +3773,11 @@ function initStyleBar() {
     App.toolProps.strokeWidth = w;
     applyProp({ strokeWidth: w });
   });
-  bindLive(sbFC, v => { App.toolProps.fillColor = v; return { fill: v }; },
+  bindLive(sbFC, v => { App.toolProps.fillColor = v; return { bgFill: v }; },
            () => sbFN?.classList.remove('active'));
   if (sbFN) sbFN.addEventListener('click', () => {
     App.toolProps.fillColor = 'transparent';
-    applyProp({ fill: 'transparent' });
+    applyProp({ bgFill: 'transparent' });
     sbFN.classList.add('active');
   });
   bindLive(sbTC, v => { App.toolProps.fontColor = v; return { fill: v }; });
@@ -3822,13 +3822,20 @@ function isSymbolBackgroundFill(fill) {
   return hex === '#ffffff' || String(fill).toLowerCase() === 'white';
 }
 
+// Texte seul (zone de texte, étiquette de surface) : `fill` y est la couleur
+// des caractères, le fond est `backgroundColor`
+function isTextObject(obj) {
+  return obj?.type === 'textbox' || obj?.type === 'text' || obj?.type === 'i-text';
+}
+
 // Style « effectif » d'un objet pour peupler les contrôles : pour un groupe
 // composé, celui du premier enfant tracé. `compound` signale un groupe dont le
 // remplissage ne doit pas être modifié globalement.
 function effectiveStyle(obj) {
   const kind = obj?.data?.type;
   const compound = obj?.type === 'group' && ['symbol', 'dimension', 'leader', 'count', 'stamp'].includes(kind);
-  if (!compound) return { stroke: obj.stroke, strokeWidth: obj.strokeWidth, fill: obj.fill, compound: false };
+  if (!compound) return { stroke: obj.stroke, strokeWidth: obj.strokeWidth,
+                          fill: isTextObject(obj) ? obj.backgroundColor : obj.fill, compound: false };
   const kids = obj.getObjects ? obj.getObjects() : [];
   const ref  = kids.find(k => k.stroke && k.stroke !== 'none' && k.type !== 'text' && k.type !== 'i-text' && k.type !== 'textbox')
             || kids.find(k => k.stroke && k.stroke !== 'none')
@@ -3849,6 +3856,15 @@ function recolorSymbolObjects(objects, color) {
 function applyStyleToObject(obj, props) {
   if (!obj) return;
   if (obj.type === 'activeSelection') { obj.getObjects().forEach(o => applyStyleToObject(o, props)); return; }
+
+  // `bgFill` = contrôle « Fond » : fond du cadre pour un texte (sinon le texte
+  // lui-même devenait transparent, v1.8.2), remplissage pour une forme
+  if ('bgFill' in props) {
+    const { bgFill, ...rest } = props;
+    props = isTextObject(obj)
+      ? { ...rest, backgroundColor: isTransparentFill(bgFill) ? '' : bgFill }
+      : { ...rest, fill: bgFill };
+  }
 
   const kind = obj.data?.type;
   const kids = obj.type === 'group' && obj.getObjects ? obj.getObjects() : null;
@@ -3931,7 +3947,7 @@ function initSidebar() {
   bindStyleControl('prop-fill-color', 'input', (v) => {
     App.toolProps.fillColor = v;
     if (document.getElementById('prop-fill-mode').value === 'solid')
-      applyToSelection({ fill: v }, false);
+      applyToSelection({ bgFill: v }, false);
   });
   bindStyleControl('prop-text-color', 'input', (v) => {
     App.toolProps.fontColor = v;
@@ -3954,7 +3970,7 @@ function initSidebar() {
   document.getElementById('prop-fill-mode').addEventListener('change', (e) => {
     const fill = e.target.value === 'transparent' ? 'transparent' : document.getElementById('prop-fill-color').value;
     App.toolProps.fillColor = fill;
-    applyToSelection({ fill });
+    applyToSelection({ bgFill: fill });
   });
   document.getElementById('prop-dash').addEventListener('change', (e) => {
     const map = { solid: null, dashed: [8, 4], dotted: [2, 4] };
