@@ -3473,6 +3473,58 @@ function pasteClipboard() {
   });
 }
 
+function groupSelected() {
+  const fc   = App.canvas;
+  const objs = fc.getActiveObjects();
+  if (objs.length < 2) { showToast('Sélectionnez au moins 2 objets pour grouper'); return; }
+  const layerId = objs[0].data?.layerId ?? App.activeLayerId;
+  const pageNum = objs[0].data?.pageNum ?? App.currentPage;
+  fc.discardActiveObject();
+  objs.forEach(o => fc.remove(o));
+  const grp = new fabric.Group(objs, {
+    data: { type: 'usergroup', layerId, pageNum },
+  });
+  applyLayerPropsToObj(grp);
+  fc.add(grp);
+  fc.setActiveObject(grp);
+  fc.requestRenderAll();
+  saveHistoryState();
+}
+
+function ungroupSelected() {
+  const fc  = App.canvas;
+  const obj = fc.getActiveObject();
+  if (!obj || obj.data?.type !== 'usergroup') { showToast('Sélectionnez un groupe à dissocier'); return; }
+  const items = obj.getObjects();
+  const layerId = obj.data?.layerId ?? App.activeLayerId;
+  const pageNum = obj.data?.pageNum ?? App.currentPage;
+  fc.remove(obj);
+  items.forEach(o => {
+    grp_restoreTransform(o, obj);
+    if (!o.data) o.data = {};
+    o.data.layerId = layerId;
+    o.data.pageNum = pageNum;
+    fc.add(o);
+  });
+  const sel = new fabric.ActiveSelection(items, { canvas: fc });
+  fc.setActiveObject(sel);
+  fc.requestRenderAll();
+  saveHistoryState();
+}
+
+// Restitue la transformation absolue d'un enfant après retrait du groupe parent
+function grp_restoreTransform(child, grp) {
+  const m = fabric.util.multiplyTransformMatrices(
+    grp.calcTransformMatrix(),
+    child.calcTransformMatrix()
+  );
+  const opts = fabric.util.qrDecompose(m);
+  child.set({ left: opts.translateX, top: opts.translateY,
+               scaleX: opts.scaleX, scaleY: opts.scaleY,
+               angle: opts.angle, flipX: false, flipY: false });
+  child.setCoords();
+}
+
 function duplicateSelected() {
   const objs = App.canvas.getActiveObjects();
   if (!objs.length) return;
@@ -3900,6 +3952,9 @@ function applyStyleToObject(obj, props) {
       if ('fill' in props && isTxt && kind === 'leader') k.set('fill', props.fill);   // couleur du texte de la bulle
     });
     if ('opacity' in props) obj.set('opacity', props.opacity);
+  } else if (kind === 'usergroup') {
+    if (kids) kids.forEach(k => applyStyleToObject(k, props));
+    if ('opacity' in props) obj.set('opacity', props.opacity);
   } else if (kind === 'symbol') {
     obj.set(props);
   } else {
@@ -4311,6 +4366,11 @@ function initKeyboardShortcuts() {
     if (isCtrl && e.key === 'End')  { e.preventDefault(); changeZOrder('back');  return; }
 
     // Relevé
+    if (isCtrl && (e.key === 'g' || e.key === 'G')) {
+      e.preventDefault();
+      e.shiftKey ? ungroupSelected() : groupSelected();
+      return;
+    }
     if (isCtrl && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); openMeasuresModal(); return; }
     if (!isCtrl && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
