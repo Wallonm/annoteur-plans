@@ -2402,7 +2402,10 @@ function renderLayersList() {
     item.className = `layer-item${layer.id === App.activeLayerId ? ' active' : ''}` +
                      (n === 0 ? ' empty-here' : '');
     item.dataset.layerId = String(layer.id);
-    item.addEventListener('click', () => setActiveLayer(layer.id));
+    let _clickTimer = null;
+    item.addEventListener('click', () => {
+      _clickTimer = setTimeout(() => setActiveLayer(layer.id), 200);
+    });
 
     // Pastille de couleur cliquable : ouvre un sélecteur natif
     const dot = document.createElement('label');
@@ -2426,6 +2429,7 @@ function renderLayersList() {
     name.textContent = layer.name;
     name.title = 'Double-clic pour renommer';
     name.addEventListener('dblclick', (e) => {
+      clearTimeout(_clickTimer);
       e.stopPropagation();
       openRenameLayerModal(layer.id, layer.name);
     });
