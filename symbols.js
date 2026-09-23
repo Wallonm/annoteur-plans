@@ -168,6 +168,17 @@ const SYMBOL_CATEGORIES = [
 </svg>`
       },
       {
+        id: 'table-nuit',
+        label: 'Table de nuit',
+        defaultW: 50, defaultH: 45,
+        realW_cm: 50, realH_cm: 45,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 45">
+  <rect x="3" y="3" width="44" height="39" fill="white" stroke="black" stroke-width="2"/>
+  <line x1="3" y1="30" x2="47" y2="30" stroke="black" stroke-width="1.5"/>
+  <circle cx="25" cy="36" r="2.5" fill="black"/>
+</svg>`
+      },
+      {
         id: 'pax-100',
         label: 'PAX 100×58',
         defaultW: 100, defaultH: 58,
@@ -249,6 +260,36 @@ const SYMBOL_CATEGORIES = [
   <rect x="8" y="22" width="64" height="44" rx="4" fill="white" stroke="black" stroke-width="2"/>
   <rect x="4" y="22" width="12" height="44" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
   <rect x="64" y="22" width="12" height="44" rx="4" fill="#ccc" stroke="black" stroke-width="1.5"/>
+</svg>`
+      },
+      {
+        id: 'table-basse-carree',
+        label: 'Table basse carrée',
+        defaultW: 80, defaultH: 80,
+        realW_cm: 80, realH_cm: 80,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <rect x="3" y="3" width="74" height="74" rx="4" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="10" y="10" width="60" height="60" rx="3" fill="none" stroke="black" stroke-width="1"/>
+</svg>`
+      },
+      {
+        id: 'table-ovale',
+        label: 'Table ovale',
+        defaultW: 180, defaultH: 100,
+        realW_cm: 180, realH_cm: 100,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 100">
+  <ellipse cx="90" cy="50" rx="84" ry="44" fill="white" stroke="black" stroke-width="2"/>
+  <!-- chaises haut -->
+  <rect x="26"  y="2"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="76"  y="2"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="126" y="2"  width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <!-- chaises bas -->
+  <rect x="26"  y="84" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="76"  y="84" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="126" y="84" width="28" height="14" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <!-- chaises côtés -->
+  <rect x="2"  y="35" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
+  <rect x="164" y="35" width="14" height="30" rx="3" fill="#eee" stroke="black" stroke-width="1.5"/>
 </svg>`
       },
       {
