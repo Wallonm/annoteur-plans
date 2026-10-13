@@ -2,7 +2,7 @@
 // app.js — Logique principale de l'annoteur de plans PDF
 // ============================================================
 
-const APP_VERSION  = '1.8.3';   // Fond transparent des symboles, gel annotations mesure, barre de style
+const APP_VERSION  = '1.8.4';   // Retour des outils polyligne, polygone et dessin libre
 const PROJECT_FORMAT = '2.1';   // points PDF + calques globaux au document
 
 // === Configuration PDF.js ===
@@ -3586,8 +3586,8 @@ function changeZOrder(action) {
 // l'implémentation (l'infobulle annonçait « Espace » pour un raccourci « H »).
 // ============================================================
 const TOOL_SHORTCUTS = {
-  v: 'select', h: 'pan', l: 'line', r: 'rect',
-  c: 'circle', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate',
+  v: 'select', h: 'pan', l: 'line', y: 'polyline', p: 'polygon', d: 'freedraw',
+  r: 'rect', c: 'circle', n: 'cloud', t: 'text', m: 'measure', k: 'calibrate',
   x: 'count', a: 'areapoly',
 };
 

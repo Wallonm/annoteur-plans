@@ -1,5 +1,13 @@
 # Journal des versions — Annoteur Plans PDF
 
+## v1.8.4 — Retour des outils polyligne, polygone et dessin libre (13/10/2026)
+
+- Barre gauche : boutons ⌇ Polyligne (Y), ⬠ Polygone (P), ✎ Dessin libre (D)
+  remis après la ligne. Retirés en v1.7.0, leur code n'avait pas bougé : sans
+  bouton ni raccourci, le polygone était inaccessible et ▦ (surface de la
+  sélection) ne fonctionnait plus que sur un rectangle.
+- Raccourcis Y, P, D ajoutés (Ctrl+Y et Ctrl+D restent Rétablir et Dupliquer).
+
 ## v1.8.3 — Bouton « Fond transparent » (23/09/2026)
 
 - Barre de style et panneau latéral : sur une zone de texte ou une étiquette de surface, « Fond » agit sur le cadre (`backgroundColor`). Avant, ∅ rendait le texte lui-même invisible et la couleur de fond recolorait les caractères.
